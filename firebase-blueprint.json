@@ -1,0 +1,117 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "User settings and profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "currency": { "type": "string" },
+        "theme": { "type": "string", "enum": ["light", "dark"] }
+      },
+      "required": ["uid", "email"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Income or expense record",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "description": { "type": "string" },
+        "amount": { "type": "number" },
+        "category": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "type": { "type": "string", "enum": ["income", "expense"] },
+        "paymentMethod": { "type": "string" },
+        "observation": { "type": "string" }
+      },
+      "required": ["uid", "description", "amount", "category", "date", "type"]
+    },
+    "FixedExpense": {
+      "title": "Fixed Expense",
+      "description": "Recurrent monthly expense",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "amount": { "type": "number" },
+        "category": { "type": "string" },
+        "dueDay": { "type": "integer" },
+        "status": { "type": "string", "enum": ["paid", "pending"] }
+      },
+      "required": ["uid", "name", "amount", "category", "dueDay", "status"]
+    },
+    "CreditCard": {
+      "title": "Credit Card",
+      "description": "Credit card information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "brand": { "type": "string" },
+        "limit": { "type": "number" },
+        "closingDay": { "type": "integer" },
+        "dueDay": { "type": "integer" }
+      },
+      "required": ["uid", "name", "brand", "limit", "closingDay", "dueDay"]
+    },
+    "CardPurchase": {
+      "title": "Card Purchase",
+      "description": "Purchase made with a credit card",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "cardId": { "type": "string" },
+        "description": { "type": "string" },
+        "amount": { "type": "number" },
+        "category": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "installments": { "type": "integer" },
+        "isInstallment": { "type": "boolean" }
+      },
+      "required": ["uid", "cardId", "description", "amount", "category", "date"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Custom category for transactions",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["income", "expense", "card"] },
+        "color": { "type": "string" },
+        "icon": { "type": "string" }
+      },
+      "required": ["uid", "name", "type"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile document"
+    },
+    "/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Income and expense records"
+    },
+    "/fixedExpenses/{expenseId}": {
+      "schema": "FixedExpense",
+      "description": "Monthly recurring expenses"
+    },
+    "/creditCards/{cardId}": {
+      "schema": "CreditCard",
+      "description": "User credit cards"
+    },
+    "/cardPurchases/{purchaseId}": {
+      "schema": "CardPurchase",
+      "description": "Purchases linked to credit cards"
+    },
+    "/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "User defined categories"
+    }
+  }
+}
