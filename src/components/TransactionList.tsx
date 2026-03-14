@@ -16,6 +16,7 @@ import { formatCurrency, cn } from '../lib/utils';
 import ConfirmModal from './ConfirmModal';
 import { handleFirestoreError, OperationType } from '../lib/firebase-errors';
 import { useToast } from './Toast';
+import CategoryIcon from './CategoryIcon';
 import { User as FirebaseUser } from 'firebase/auth';
 
 interface Transaction {
@@ -242,9 +243,20 @@ const TransactionList: React.FC<TransactionListProps> = ({ type, user }) => {
                     <span className="text-sm font-bold text-slate-900">{t.description}</span>
                   </td>
                   <td className="py-5">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 uppercase tracking-wider">
-                      {t.category}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <div className={cn(
+                        "w-6 h-6 rounded-lg flex items-center justify-center",
+                        t.type === 'income' ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
+                      )}>
+                        <CategoryIcon 
+                          name={categories.find(c => c.name === t.category)?.icon} 
+                          size={12} 
+                        />
+                      </div>
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 uppercase tracking-wider">
+                        {t.category}
+                      </span>
+                    </div>
                   </td>
                   <td className={cn(
                     "py-5 text-sm font-bold text-right",
@@ -253,7 +265,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ type, user }) => {
                     {t.type === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
                   </td>
                   <td className="py-5 text-right">
-                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                    <div className="flex justify-end gap-2 transition-all">
                       <button 
                         onClick={() => openEdit(t)}
                         className="p-2 text-slate-400 hover:text-accent hover:bg-accent-soft rounded-lg transition-all"

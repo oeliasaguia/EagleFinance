@@ -10,6 +10,7 @@ import {
   ChevronRight,
   Menu,
   X,
+  Bird,
   BarChart3
 } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -21,20 +22,18 @@ interface SidebarProps {
   setActiveSection: (section: string) => void;
   onLogout: () => void;
   user: FirebaseUser;
+  isOpen: boolean;
+  setIsOpen: (isOpen: boolean) => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeSection, setActiveSection, onLogout, user }) => {
-  const [isOpen, setIsOpen] = useState(false);
-
-  useEffect(() => {
-    if (window.innerWidth >= 1024) {
-      setIsOpen(true);
-    }
-
-    const handleToggle = () => setIsOpen(prev => !prev);
-    window.addEventListener('toggle-sidebar', handleToggle);
-    return () => window.removeEventListener('toggle-sidebar', handleToggle);
-  }, []);
+const Sidebar: React.FC<SidebarProps> = ({ 
+  activeSection, 
+  setActiveSection, 
+  onLogout, 
+  user,
+  isOpen,
+  setIsOpen
+}) => {
 
   const menuItems = [
     { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -72,7 +71,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, setActiveSection, onLo
       )}>
         <div className="p-8 flex items-center gap-3">
           <div className="w-10 h-10 bg-accent rounded-xl flex items-center justify-center text-white shadow-lg shadow-accent/20">
-            <BarChart3 size={20} />
+            <Bird size={20} />
           </div>
           {isOpen && (
             <span className="font-bold text-xl text-slate-900 tracking-tight animate-in fade-in slide-in-from-left-2">

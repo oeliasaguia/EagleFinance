@@ -9,7 +9,10 @@ import {
   Plus,
   Filter,
   Download,
-  MoreHorizontal
+  MoreHorizontal,
+  X,
+  Loader2,
+  Bird
 } from 'lucide-react';
 import { 
   AreaChart, 
@@ -23,10 +26,14 @@ import {
   Pie,
   Cell
 } from 'recharts';
-import { db } from '../firebase';
-import { collection, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
-import { formatCurrency, cn } from '../lib/utils';
+import { db, auth } from '../firebase';
+import { collection, query, where, onSnapshot, orderBy, limit, addDoc, serverTimestamp } from 'firebase/firestore';
+import { formatCurrency, cn, handleFirestoreError, OperationType } from '../lib/utils';
 import { User as FirebaseUser } from 'firebase/auth';
+import CategoryIcon from './CategoryIcon';
+import { useToast } from './Toast';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface DashboardProps {
   user: FirebaseUser;
@@ -43,6 +50,9 @@ interface Transaction {
 
 const Dashboard: React.FC<DashboardProps> = ({ user }) => {
   const [transactions, setTransactions] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
+  const { showToast } = useToast();
+  
   const [summary, setSummary] = useState({
     balance: 0,
     income: 0,
@@ -78,6 +88,23 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
     return () => unsubscribe();
   }, [user.uid]);
 
+  useEffect(() => {
+    const q = query(
+      collection(db, 'categories'),
+      where('uid', '==', user.uid)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setCategories(data);
+    });
+
+    return () => unsubscribe();
+  }, [user.uid]);
+
   const chartData = [
     { name: 'Seg', value: 400 },
     { name: 'Ter', value: 300 },
@@ -88,12 +115,81 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
     { name: 'Dom', value: 700 },
   ];
 
-  const pieData = [
-    { name: 'Alimentação', value: 400, color: '#6366f1' },
-    { name: 'Transporte', value: 300, color: '#818cf8' },
-    { name: 'Lazer', value: 200, color: '#a5b4fc' },
-    { name: 'Outros', value: 100, color: '#c7d2fe' },
-  ];
+  const expenses = transactions.filter(t => t.type === 'expense');
+  const expenseByCategory = expenses.reduce((acc: any, t) => {
+    acc[t.category] = (acc[t.category] || 0) + t.amount;
+    return acc;
+  }, {});
+
+  const totalExpenses = expenses.reduce((acc, t) => acc + t.amount, 0);
+  
+  const pieData = Object.keys(expenseByCategory).map((name, index) => ({
+    name,
+    value: totalExpenses > 0 ? Math.round((expenseByCategory[name] / totalExpenses) * 100) : 0,
+    color: [`#6366f1`, `#818cf8`, `#a5b4fc`, `#c7d2fe`, `#e0e7ff`][index % 5]
+  })).sort((a, b) => b.value - a.value).slice(0, 5);
+
+  if (pieData.length === 0) {
+    pieData.push({ name: 'Sem dados', value: 100, color: '#f1f5f9' });
+  }
+
+  const handleGeneratePDF = () => {
+    try {
+      const doc = new jsPDF();
+      
+      // Header
+      doc.setFontSize(20);
+      doc.setTextColor(99, 102, 241); // Indigo-500
+      doc.text('EagleFinance - Relatório Financeiro', 14, 22);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, 14, 30);
+      doc.text(`Usuário: ${user.displayName || user.email}`, 14, 35);
+
+      // Summary
+      doc.setFontSize(14);
+      doc.setTextColor(0);
+      doc.text('Resumo Geral', 14, 50);
+      
+      autoTable(doc, {
+        startY: 55,
+        head: [['Saldo Total', 'Receitas', 'Despesas']],
+        body: [[
+          formatCurrency(summary.balance),
+          formatCurrency(summary.income),
+          formatCurrency(summary.expenses)
+        ]],
+        theme: 'striped',
+        headStyles: { fillColor: [99, 102, 241] }
+      });
+
+      // Transactions
+      doc.text('Últimas Transações', 14, (doc as any).lastAutoTable.finalY + 15);
+      
+      const tableData = transactions.slice(0, 20).map(t => [
+        t.date.toLocaleDateString('pt-BR'),
+        t.description,
+        t.category,
+        t.type === 'income' ? 'Receita' : 'Despesa',
+        formatCurrency(t.amount)
+      ]);
+
+      autoTable(doc, {
+        startY: (doc as any).lastAutoTable.finalY + 20,
+        head: [['Data', 'Descrição', 'Categoria', 'Tipo', 'Valor']],
+        body: tableData,
+        theme: 'grid',
+        headStyles: { fillColor: [99, 102, 241] }
+      });
+
+      doc.save('EagleFinance_Relatorio.pdf');
+      showToast('Relatório PDF gerado com sucesso!', 'success');
+    } catch (error) {
+      console.error('PDF Error:', error);
+      showToast('Erro ao gerar relatório PDF.', 'error');
+    }
+  };
 
   return (
     <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -104,13 +200,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
           <p className="text-slate-500 mt-1 font-medium">Aqui está o resumo das suas finanças hoje.</p>
         </div>
         <div className="flex items-center gap-3">
-          <button className="btn-secondary flex items-center gap-2">
+          <button 
+            onClick={handleGeneratePDF}
+            className="btn-secondary flex items-center gap-2"
+          >
             <Download size={18} />
             Relatório
-          </button>
-          <button className="btn-primary flex items-center gap-2">
-            <Plus size={18} />
-            Novo Registro
           </button>
         </div>
       </div>
@@ -284,7 +379,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                   "w-10 h-10 rounded-xl flex items-center justify-center",
                   t.type === 'income' ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
                 )}>
-                  {t.type === 'income' ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
+                  <CategoryIcon 
+                    name={categories.find(c => c.name === t.category)?.icon} 
+                    size={18} 
+                  />
                 </div>
                 <div>
                   <p className="text-sm font-bold text-slate-900">{t.description}</p>

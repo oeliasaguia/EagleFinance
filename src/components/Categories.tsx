@@ -5,6 +5,7 @@ import {
   Home, Smartphone, Coffee, Gift, Briefcase, 
   TrendingUp, TrendingDown, DollarSign, CreditCard
 } from 'lucide-react';
+import CategoryIcon from './CategoryIcon';
 import ConfirmModal from './ConfirmModal';
 import { formatCurrency, cn } from '../lib/utils';
 import { db } from '../firebase';
@@ -201,7 +202,7 @@ const Categories: React.FC<CategoriesProps> = ({ user }) => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {categories.length === 0 ? (
           <div className="col-span-full py-20 text-center modern-card border-dashed">
             <Tag className="mx-auto text-slate-300 mb-4" size={48} />
@@ -215,35 +216,37 @@ const Categories: React.FC<CategoriesProps> = ({ user }) => {
           </div>
         ) : (
           categories.map((cat) => (
-            <div key={cat.id} className="modern-card group">
-              <div className="flex justify-between items-start">
+            <div key={cat.id} className="modern-card group p-3 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
                 <div className={cn(
-                  "p-3 rounded-xl transition-all",
+                  "w-10 h-10 rounded-xl flex items-center justify-center transition-all shrink-0",
                   cat.type === 'income' ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
                 )}>
-                  <IconRenderer name={cat.icon || 'Tag'} size={24} />
+                  <CategoryIcon name={cat.icon} size={20} />
                 </div>
-                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                  <button 
-                    onClick={() => openEdit(cat)}
-                    className="p-2 text-slate-400 hover:text-accent hover:bg-accent-soft rounded-lg transition-all"
-                  >
-                    <Edit2 size={16} />
-                  </button>
-                  <button 
-                    onClick={() => {
-                      setCategoryToDelete(cat.id!);
-                      setIsConfirmOpen(true);
-                    }}
-                    className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 truncate max-w-[120px]">{cat.name}</h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    {cat.type === 'income' ? 'Receita' : 'Despesa'}
+                  </p>
                 </div>
               </div>
-              <div className="mt-6">
-                <h3 className="text-lg font-bold text-slate-900">{cat.name}</h3>
-                <p className="stat-label mt-1">{cat.type === 'income' ? 'Receita' : 'Despesa'}</p>
+              <div className="flex gap-1 transition-all shrink-0">
+                <button 
+                  onClick={() => openEdit(cat)}
+                  className="p-1.5 text-slate-400 hover:text-accent hover:bg-accent-soft rounded-lg transition-all"
+                >
+                  <Edit2 size={14} />
+                </button>
+                <button 
+                  onClick={() => {
+                    setCategoryToDelete(cat.id!);
+                    setIsConfirmOpen(true);
+                  }}
+                  className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
+                >
+                  <Trash2 size={14} />
+                </button>
               </div>
             </div>
           ))

@@ -24,8 +24,8 @@ service cloud.firestore {
       return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
     }
 
-    function isValidDateString(dateStr) {
-      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    function isValidDate(date) {
+      return date is timestamp;
     }
 
     // ===============================================================
@@ -48,30 +48,37 @@ service cloud.firestore {
              data.description is string && data.description.size() > 0 && data.description.size() < 200 &&
              data.amount is number &&
              data.category is string &&
-             isValidDateString(data.date) &&
+             isValidDate(data.date) &&
              data.type in ['income', 'expense'] &&
              (data.get('paymentMethod', '') is string) &&
-             (data.get('observation', '') is string);
+             (data.get('observation', '') is string) &&
+             (data.get('createdAt', request.time) is timestamp) &&
+             (data.get('updatedAt', request.time) is timestamp);
     }
 
     function isValidFixedExpense(data) {
-      return data.keys().hasAll(['uid', 'name', 'amount', 'category', 'dueDay', 'status']) &&
+      return data.keys().hasAll(['uid', 'description', 'amount', 'category', 'dueDate', 'status']) &&
              data.uid == request.auth.uid &&
-             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.description is string && data.description.size() > 0 && data.description.size() < 200 &&
              data.amount is number &&
              data.category is string &&
-             data.dueDay is int && data.dueDay >= 1 && data.dueDay <= 31 &&
-             data.status in ['paid', 'pending'];
+             data.dueDate is int && data.dueDate >= 1 && data.dueDate <= 31 &&
+             data.status in ['paid', 'pending'] &&
+             (data.get('createdAt', request.time) is timestamp) &&
+             (data.get('updatedAt', request.time) is timestamp);
     }
 
     function isValidCreditCard(data) {
-      return data.keys().hasAll(['uid', 'name', 'brand', 'limit', 'closingDay', 'dueDay']) &&
+      return data.keys().hasAll(['uid', 'name', 'bank', 'limit', 'currentBalance']) &&
              data.uid == request.auth.uid &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             data.brand is string &&
+             (data.get('bank', '') is string) &&
              data.limit is number &&
-             data.closingDay is int && data.closingDay >= 1 && data.closingDay <= 31 &&
-             data.dueDay is int && data.dueDay >= 1 && data.dueDay <= 31;
+             data.currentBalance is number &&
+             (data.get('color', '') is string) &&
+             (data.get('icon', '') is string) &&
+             (data.get('createdAt', request.time) is timestamp) &&
+             (data.get('updatedAt', request.time) is timestamp);
     }
 
     function isValidCardPurchase(data) {
@@ -81,9 +88,11 @@ service cloud.firestore {
              data.description is string && data.description.size() > 0 && data.description.size() < 200 &&
              data.amount is number &&
              data.category is string &&
-             isValidDateString(data.date) &&
+             isValidDate(data.date) &&
              (data.get('installments', 1) is int) &&
-             (data.get('isInstallment', false) is bool);
+             (data.get('isInstallment', false) is bool) &&
+             (data.get('createdAt', request.time) is timestamp) &&
+             (data.get('updatedAt', request.time) is timestamp);
     }
 
     function isValidCategory(data) {
@@ -92,7 +101,9 @@ service cloud.firestore {
              data.name is string && data.name.size() > 0 && data.name.size() < 50 &&
              data.type in ['income', 'expense', 'card'] &&
              (data.get('color', '') is string) &&
-             (data.get('icon', '') is string);
+             (data.get('icon', '') is string) &&
+             (data.get('createdAt', request.time) is timestamp) &&
+             (data.get('updatedAt', request.time) is timestamp);
     }
 
     // ===============================================================
@@ -112,7 +123,7 @@ service cloud.firestore {
       allow delete: if isDocOwner();
     }
 
-    match /fixedExpenses/{expenseId} {
+    match /fixed_expenses/{expenseId} {
       allow read: if isDocOwner();
       allow create: if isRequestOwner() && isValidFixedExpense(request.resource.data);
       allow update: if isDocOwner() && isRequestOwner() && isValidFixedExpense(request.resource.data);
@@ -126,7 +137,7 @@ service cloud.firestore {
       allow delete: if isDocOwner();
     }
 
-    match /cardPurchases/{purchaseId} {
+    match /card_purchases/{purchaseId} {
       allow read: if isDocOwner();
       allow create: if isRequestOwner() && isValidCardPurchase(request.resource.data);
       allow update: if isDocOwner() && isRequestOwner() && isValidCardPurchase(request.resource.data);
