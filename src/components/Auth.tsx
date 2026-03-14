@@ -22,10 +22,21 @@ const Auth: React.FC = () => {
     setError(null);
     try {
       const provider = new GoogleAuthProvider();
+      // Force account selection to avoid some silent failures
+      provider.setCustomParameters({ prompt: 'select_account' });
       await signInWithPopup(auth, provider);
     } catch (error: any) {
       console.error('Login error:', error);
-      setError('Erro ao entrar com Google. Tente novamente.');
+      if (error.code === 'auth/popup-blocked') {
+        setError('O popup foi bloqueado pelo navegador. Por favor, permita popups para este site.');
+      } else if (error.code === 'auth/unauthorized-domain') {
+        setError('Este domínio não está autorizado no Firebase. Adicione este domínio na lista de domínios autorizados no Console do Firebase.');
+      } else if (error.code === 'auth/cancelled-popup-request') {
+        // User closed the popup, don't show a big error
+        return;
+      } else {
+        setError('Erro ao entrar com Google. Verifique se o domínio está autorizado no Firebase.');
+      }
     } finally {
       setIsLoading(false);
     }
