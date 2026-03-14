@@ -8,11 +8,9 @@ import {
   ArrowDownRight,
   Plus,
   Filter,
-  Download,
   MoreHorizontal,
   X,
-  Loader2,
-  Bird
+  Loader2
 } from 'lucide-react';
 import { 
   AreaChart, 
@@ -27,13 +25,11 @@ import {
   Cell
 } from 'recharts';
 import { db, auth } from '../firebase';
-import { collection, query, where, onSnapshot, orderBy, limit, addDoc, serverTimestamp } from 'firebase/firestore';
-import { formatCurrency, cn, handleFirestoreError, OperationType } from '../lib/utils';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { useToast } from './Toast';
+import { cn, formatCurrency, parseFirestoreDate } from '../lib/utils';
 import { User as FirebaseUser } from 'firebase/auth';
 import CategoryIcon from './CategoryIcon';
-import { useToast } from './Toast';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 
 interface DashboardProps {
   user: FirebaseUser;
@@ -63,16 +59,22 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
   useEffect(() => {
     const q = query(
       collection(db, 'transactions'),
-      where('uid', '==', user.uid),
-      orderBy('date', 'desc')
+      where('uid', '==', user.uid)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        date: doc.data().date?.toDate() || new Date()
-      })) as Transaction[];
+      const data = snapshot.docs.map(doc => {
+        const d = doc.data();
+        return {
+          id: doc.id,
+          ...d,
+          date: parseFirestoreDate(d.date)
+        };
+      }) as Transaction[];
+
+      // Sort in memory to avoid index issues
+      data.sort((a, b) => b.date.getTime() - a.date.getTime());
+
       setTransactions(data);
 
       const income = data.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amount, 0);
@@ -126,70 +128,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
   const pieData = Object.keys(expenseByCategory).map((name, index) => ({
     name,
     value: totalExpenses > 0 ? Math.round((expenseByCategory[name] / totalExpenses) * 100) : 0,
-    color: [`#6366f1`, `#818cf8`, `#a5b4fc`, `#c7d2fe`, `#e0e7ff`][index % 5]
+    color: [`#000000`, `#1e293b`, `#475569`, `#94a3b8`, `#cbd5e1`][index % 5]
   })).sort((a, b) => b.value - a.value).slice(0, 5);
 
   if (pieData.length === 0) {
     pieData.push({ name: 'Sem dados', value: 100, color: '#f1f5f9' });
   }
-
-  const handleGeneratePDF = () => {
-    try {
-      const doc = new jsPDF();
-      
-      // Header
-      doc.setFontSize(20);
-      doc.setTextColor(99, 102, 241); // Indigo-500
-      doc.text('EagleFinance - Relatório Financeiro', 14, 22);
-      
-      doc.setFontSize(10);
-      doc.setTextColor(100);
-      doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, 14, 30);
-      doc.text(`Usuário: ${user.displayName || user.email}`, 14, 35);
-
-      // Summary
-      doc.setFontSize(14);
-      doc.setTextColor(0);
-      doc.text('Resumo Geral', 14, 50);
-      
-      autoTable(doc, {
-        startY: 55,
-        head: [['Saldo Total', 'Receitas', 'Despesas']],
-        body: [[
-          formatCurrency(summary.balance),
-          formatCurrency(summary.income),
-          formatCurrency(summary.expenses)
-        ]],
-        theme: 'striped',
-        headStyles: { fillColor: [99, 102, 241] }
-      });
-
-      // Transactions
-      doc.text('Últimas Transações', 14, (doc as any).lastAutoTable.finalY + 15);
-      
-      const tableData = transactions.slice(0, 20).map(t => [
-        t.date.toLocaleDateString('pt-BR'),
-        t.description,
-        t.category,
-        t.type === 'income' ? 'Receita' : 'Despesa',
-        formatCurrency(t.amount)
-      ]);
-
-      autoTable(doc, {
-        startY: (doc as any).lastAutoTable.finalY + 20,
-        head: [['Data', 'Descrição', 'Categoria', 'Tipo', 'Valor']],
-        body: tableData,
-        theme: 'grid',
-        headStyles: { fillColor: [99, 102, 241] }
-      });
-
-      doc.save('EagleFinance_Relatorio.pdf');
-      showToast('Relatório PDF gerado com sucesso!', 'success');
-    } catch (error) {
-      console.error('PDF Error:', error);
-      showToast('Erro ao gerar relatório PDF.', 'error');
-    }
-  };
 
   return (
     <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -200,30 +144,50 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
           <p className="text-slate-500 mt-1 font-medium">Aqui está o resumo das suas finanças hoje.</p>
         </div>
         <div className="flex items-center gap-3">
-          <button 
-            onClick={handleGeneratePDF}
-            className="btn-secondary flex items-center gap-2"
-          >
-            <Download size={18} />
-            Relatório
-          </button>
+          {/* Report button removed from here as it is now in the sidebar menu */}
         </div>
       </div>
 
       {/* Stats Bento Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="modern-card bg-accent text-white border-none">
-          <div className="flex justify-between items-start mb-4">
-            <div className="p-2 bg-white/20 rounded-lg">
-              <Wallet size={20} />
+        <div className="modern-card !bg-black text-white border-none shadow-xl shadow-black/20 overflow-hidden relative">
+          <div className="relative z-10">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center">
+                <Wallet size={24} />
+              </div>
             </div>
-            <div className="flex items-center gap-1 text-xs font-bold bg-white/20 px-2 py-1 rounded-full">
-              <TrendingUp size={12} />
-              {summary.monthlyChange}%
+            <p className="text-white/70 text-xs font-bold uppercase tracking-wider">Saldo Total</p>
+            <h2 className="text-3xl font-bold mt-1 tracking-tight">{formatCurrency(summary.balance)}</h2>
+            
+            {/* Sparkline Chart inside the card */}
+            <div className="h-16 w-full mt-4 -mx-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData}>
+                  <Area 
+                    type="monotone" 
+                    dataKey="value" 
+                    stroke="#ffffff" 
+                    fill="#ffffff" 
+                    fillOpacity={0.1} 
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="mt-4 pt-4 border-t border-white/10 flex items-center gap-2">
+              <div className={cn(
+                "flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg",
+                summary.monthlyChange >= 0 ? "bg-emerald-500/20 text-emerald-100" : "bg-rose-500/20 text-rose-100"
+              )}>
+                {summary.monthlyChange >= 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+                {Math.abs(summary.monthlyChange).toFixed(1)}%
+              </div>
+              <span className="text-white/50 text-[10px] uppercase font-bold tracking-widest">Este mês</span>
             </div>
           </div>
-          <p className="text-white/70 text-xs font-bold uppercase tracking-wider">Saldo Total</p>
-          <h2 className="text-3xl font-bold mt-1">{formatCurrency(summary.balance)}</h2>
         </div>
 
         <div className="modern-card">
@@ -278,90 +242,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
         </div>
       </div>
 
-      {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 modern-card">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h3 className="text-lg font-bold text-slate-900">Fluxo de Caixa</h3>
-              <p className="text-xs text-slate-500 font-medium">Acompanhamento semanal de gastos</p>
-            </div>
-            <select className="text-xs font-bold bg-slate-50 border-none rounded-lg p-2 focus:ring-0">
-              <option>Últimos 7 dias</option>
-              <option>Últimos 30 dias</option>
-            </select>
-          </div>
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData}>
-                <defs>
-                  <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.1}/>
-                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis 
-                  dataKey="name" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{fill: '#94a3b8', fontSize: 12, fontWeight: 500}}
-                  dy={10}
-                />
-                <YAxis hide />
-                <Tooltip 
-                  contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}}
-                />
-                <Area 
-                  type="monotone" 
-                  dataKey="value" 
-                  stroke="#6366f1" 
-                  strokeWidth={3}
-                  fillOpacity={1} 
-                  fill="url(#colorValue)" 
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="modern-card">
-          <h3 className="text-lg font-bold text-slate-900 mb-2">Gastos por Categoria</h3>
-          <p className="text-xs text-slate-500 font-medium mb-8">Distribuição mensal</p>
-          <div className="h-[200px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="space-y-3 mt-6">
-            {pieData.map((item) => (
-              <div key={item.name} className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full" style={{backgroundColor: item.color}} />
-                  <span className="text-xs font-medium text-slate-600">{item.name}</span>
-                </div>
-                <span className="text-xs font-bold text-slate-900">{item.value}%</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
       {/* Recent Transactions */}
       <div className="modern-card">
         <div className="flex items-center justify-between mb-8">
@@ -407,6 +287,90 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
               <p className="text-slate-400 text-sm">Nenhuma transação encontrada.</p>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Charts Section - Moved to bottom */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 modern-card">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">Fluxo de Caixa</h3>
+              <p className="text-xs text-slate-500 font-medium">Acompanhamento semanal de gastos</p>
+            </div>
+            <select className="text-xs font-bold bg-slate-50 border-none rounded-lg p-2 focus:ring-0">
+              <option>Últimos 7 dias</option>
+              <option>Últimos 30 dias</option>
+            </select>
+          </div>
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#000000" stopOpacity={0.1}/>
+                    <stop offset="95%" stopColor="#000000" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis 
+                  dataKey="name" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{fill: '#94a3b8', fontSize: 12, fontWeight: 500}}
+                  dy={10}
+                />
+                <YAxis hide />
+                <Tooltip 
+                  contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}}
+                />
+                <Area 
+                  type="monotone" 
+                  dataKey="value" 
+                  stroke="#000000" 
+                  strokeWidth={3}
+                  fillOpacity={1} 
+                  fill="url(#colorValue)" 
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="modern-card">
+          <h3 className="text-lg font-bold text-slate-900 mb-2">Gastos por Categoria</h3>
+          <p className="text-xs text-slate-500 font-medium mb-8">Distribuição mensal</p>
+          <div className="h-[200px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={pieData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={80}
+                  paddingAngle={5}
+                  dataKey="value"
+                >
+                  {pieData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="space-y-3 mt-6">
+            {pieData.map((item) => (
+              <div key={item.name} className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full" style={{backgroundColor: item.color}} />
+                  <span className="text-xs font-medium text-slate-600">{item.name}</span>
+                </div>
+                <span className="text-xs font-bold text-slate-900">{item.value}%</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>

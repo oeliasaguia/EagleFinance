@@ -8,11 +8,12 @@ import {
   Loader2, 
   X,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  ChevronRight
 } from 'lucide-react';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, updateDoc, orderBy, serverTimestamp } from 'firebase/firestore';
-import { formatCurrency, cn } from '../lib/utils';
+import { formatCurrency, cn, parseFirestoreDate } from '../lib/utils';
 import ConfirmModal from './ConfirmModal';
 import { handleFirestoreError, OperationType } from '../lib/firebase-errors';
 import { useToast } from './Toast';
@@ -50,23 +51,30 @@ const TransactionList: React.FC<TransactionListProps> = ({ type, user }) => {
     amount: '',
     category: '',
     date: new Date().toISOString().split('T')[0],
-    type: type
+    type: type,
+    paymentMethod: ''
   });
 
   useEffect(() => {
     const q = query(
       collection(db, 'transactions'),
       where('uid', '==', user.uid),
-      where('type', '==', type),
-      orderBy('date', 'desc')
+      where('type', '==', type)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        date: doc.data().date?.toDate() || new Date()
-      })) as Transaction[];
+      const data = snapshot.docs.map(doc => {
+        const d = doc.data();
+        return {
+          id: doc.id,
+          ...d,
+          date: parseFirestoreDate(d.date)
+        };
+      }) as Transaction[];
+
+      // Sort in memory to avoid index issues
+      data.sort((a, b) => b.date.getTime() - a.date.getTime());
+
       setTransactions(data);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'transactions');
@@ -123,7 +131,8 @@ const TransactionList: React.FC<TransactionListProps> = ({ type, user }) => {
         amount: '',
         category: '',
         date: new Date().toISOString().split('T')[0],
-        type: type
+        type: type,
+        paymentMethod: ''
       });
     } catch (error) {
       handleFirestoreError(error, editingTransaction ? OperationType.UPDATE : OperationType.CREATE, 'transactions');
@@ -155,7 +164,8 @@ const TransactionList: React.FC<TransactionListProps> = ({ type, user }) => {
       amount: transaction.amount.toString(),
       category: transaction.category,
       date: transaction.date.toISOString().split('T')[0],
-      type: transaction.type
+      type: transaction.type,
+      paymentMethod: (transaction as any).paymentMethod || ''
     });
     setIsModalOpen(true);
   };
@@ -182,7 +192,8 @@ const TransactionList: React.FC<TransactionListProps> = ({ type, user }) => {
               amount: '',
               category: '',
               date: new Date().toISOString().split('T')[0],
-              type: type
+              type: type,
+              paymentMethod: ''
             });
             setIsModalOpen(true);
           }}
@@ -194,7 +205,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ type, user }) => {
       </div>
 
       <div className="modern-card">
-        <div className="flex flex-col md:flex-row gap-4 mb-8">
+        <div className="flex flex-col lg:flex-row gap-4 mb-8">
           <div className="relative flex-1">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input 
@@ -205,8 +216,8 @@ const TransactionList: React.FC<TransactionListProps> = ({ type, user }) => {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <div className="flex gap-4">
-            <div className="relative">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="relative min-w-[200px]">
               <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
               <select 
                 className="input-field pl-12 pr-10 appearance-none"
@@ -218,17 +229,21 @@ const TransactionList: React.FC<TransactionListProps> = ({ type, user }) => {
                   <option key={cat.id} value={cat.name}>{cat.name}</option>
                 ))}
               </select>
+              <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                <ChevronRight size={16} className="rotate-90" />
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-50">
                 <th className="pb-4 stat-label">Data</th>
                 <th className="pb-4 stat-label">Descrição</th>
                 <th className="pb-4 stat-label">Categoria</th>
+                <th className="pb-4 stat-label">Pagamento</th>
                 <th className="pb-4 stat-label text-right">Valor</th>
                 <th className="pb-4 stat-label text-right">Ações</th>
               </tr>
@@ -257,6 +272,9 @@ const TransactionList: React.FC<TransactionListProps> = ({ type, user }) => {
                         {t.category}
                       </span>
                     </div>
+                  </td>
+                  <td className="py-5">
+                    <span className="text-xs font-medium text-slate-500">{(t as any).paymentMethod || '-'}</span>
                   </td>
                   <td className={cn(
                     "py-5 text-sm font-bold text-right",
@@ -287,15 +305,73 @@ const TransactionList: React.FC<TransactionListProps> = ({ type, user }) => {
               ))}
             </tbody>
           </table>
-          {filteredTransactions.length === 0 && (
-            <div className="text-center py-20">
-              <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Search className="text-slate-300" size={24} />
-              </div>
-              <p className="text-slate-400 text-sm font-medium">Nenhum registro encontrado.</p>
-            </div>
-          )}
         </div>
+
+        {/* Mobile List View */}
+        <div className="md:hidden space-y-4">
+          {filteredTransactions.map((t) => (
+            <div key={t.id} className="p-4 rounded-2xl bg-slate-50/50 border border-slate-100 flex flex-col gap-3">
+              <div className="flex justify-between items-start">
+                <div className="flex items-center gap-3">
+                  <div className={cn(
+                    "w-10 h-10 rounded-xl flex items-center justify-center",
+                    t.type === 'income' ? "bg-emerald-100 text-emerald-600" : "bg-rose-100 text-rose-600"
+                  )}>
+                    <CategoryIcon 
+                      name={categories.find(c => c.name === t.category)?.icon} 
+                      size={20} 
+                    />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">{t.description}</p>
+                    <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">{t.category}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className={cn(
+                    "text-sm font-bold",
+                    t.type === 'income' ? "text-emerald-600" : "text-rose-600"
+                  )}>
+                    {t.type === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
+                  </p>
+                  <p className="text-[10px] font-medium text-slate-400">{t.date.toLocaleDateString('pt-BR')}</p>
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                  {(t as any).paymentMethod || 'Não informado'}
+                </span>
+                <div className="flex gap-1">
+                  <button 
+                    onClick={() => openEdit(t)}
+                    className="p-2 text-slate-400 hover:text-accent"
+                  >
+                    <Edit2 size={16} />
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setTransactionToDelete(t.id);
+                      setIsConfirmOpen(true);
+                    }}
+                    className="p-2 text-slate-400 hover:text-rose-500"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {filteredTransactions.length === 0 && (
+          <div className="text-center py-20">
+            <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Search className="text-slate-300" size={24} />
+            </div>
+            <p className="text-slate-400 text-sm font-medium">Nenhum registro encontrado.</p>
+          </div>
+        )}
       </div>
 
       {/* Modal */}
@@ -361,6 +437,23 @@ const TransactionList: React.FC<TransactionListProps> = ({ type, user }) => {
                   {categories.map(cat => (
                     <option key={cat.id} value={cat.name}>{cat.name}</option>
                   ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="stat-label">Método de Pagamento</label>
+                <select 
+                  className="input-field"
+                  value={formData.paymentMethod}
+                  onChange={e => setFormData({...formData, paymentMethod: e.target.value})}
+                >
+                  <option value="">Selecione um método</option>
+                  <option value="Dinheiro">Dinheiro</option>
+                  <option value="Cartão de Crédito">Cartão de Crédito</option>
+                  <option value="Cartão de Débito">Cartão de Débito</option>
+                  <option value="Pix">Pix</option>
+                  <option value="Transferência">Transferência</option>
+                  <option value="Boleto">Boleto</option>
                 </select>
               </div>
 

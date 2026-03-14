@@ -10,8 +10,9 @@ import {
   ChevronRight,
   Menu,
   X,
-  Bird,
-  BarChart3
+  Wallet,
+  BarChart3,
+  FileText
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -42,6 +43,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: 'fixed', icon: CalendarClock, label: 'Despesas Fixas' },
     { id: 'cards', icon: CreditCard, label: 'Cartões' },
     { id: 'categories', icon: BarChart3, label: 'Categorias' },
+    { id: 'reports', icon: FileText, label: 'Relatórios' },
     { id: 'profile', icon: User, label: 'Perfil' },
   ];
 
@@ -71,7 +73,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       )}>
         <div className="p-8 flex items-center gap-3">
           <div className="w-10 h-10 bg-accent rounded-xl flex items-center justify-center text-white shadow-lg shadow-accent/20">
-            <Bird size={20} />
+            <Wallet size={20} />
           </div>
           {isOpen && (
             <span className="font-bold text-xl text-slate-900 tracking-tight animate-in fade-in slide-in-from-left-2">

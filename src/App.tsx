@@ -8,10 +8,11 @@ import FixedExpenses from './components/FixedExpenses';
 import Cards from './components/Cards';
 import Profile from './components/Profile';
 import Categories from './components/Categories';
+import Reports from './components/Reports';
 import Auth from './components/Auth';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './components/Toast';
-import { Loader2, Bird, Menu } from 'lucide-react';
+import { Loader2, Wallet, Menu } from 'lucide-react';
 import { cn } from './lib/utils';
 
 export default function App() {
@@ -50,7 +51,7 @@ export default function App() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-black">
         <div className="flex flex-col items-center gap-6">
-          <Bird className="animate-bounce text-white" size={48} strokeWidth={1} />
+          <Wallet className="animate-bounce text-white" size={48} strokeWidth={1} />
           <p className="text-white font-light tracking-[0.2em] uppercase text-xs animate-pulse">EagleFinance</p>
         </div>
       </div>
@@ -69,6 +70,7 @@ export default function App() {
       case 'fixed': return <FixedExpenses user={user} />;
       case 'cards': return <Cards user={user} />;
       case 'categories': return <Categories user={user} />;
+      case 'reports': return <Reports user={user} />;
       case 'profile': return <Profile user={user} />;
       default: return <Dashboard user={user} />;
     }
@@ -90,7 +92,7 @@ export default function App() {
             </button>
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 bg-accent rounded-lg flex items-center justify-center text-white">
-                <Bird size={16} />
+                <Wallet size={16} />
               </div>
               <span className="font-bold text-slate-900 tracking-tight">EagleFinance</span>
             </div>

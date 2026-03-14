@@ -2,8 +2,8 @@
 
 @theme {
   --color-bg-main: #f8fafc;
-  --color-accent: #6366f1;
-  --color-accent-soft: #eef2ff;
+  --color-accent: #000000;
+  --color-accent-soft: #f1f5f9;
   --color-success: #10b981;
   --color-danger: #f43f5e;
   --color-card: #ffffff;

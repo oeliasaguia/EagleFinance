@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BarChart3, Mail, Lock, ArrowRight, User, Loader2, AlertCircle } from 'lucide-react';
+import { Wallet, Mail, Lock, ArrowRight, User, Loader2, AlertCircle } from 'lucide-react';
 import { auth } from '../firebase';
 import { 
   signInWithPopup, 
@@ -83,7 +83,7 @@ const Auth: React.FC = () => {
       <div className="w-full max-w-md relative animate-in zoom-in-95 duration-700">
         <div className="modern-card p-10 flex flex-col items-center text-center gap-8">
           <div className="w-16 h-16 bg-accent rounded-2xl flex items-center justify-center text-white shadow-xl shadow-accent/20">
-            <BarChart3 size={32} />
+            <Wallet size={32} />
           </div>
 
           <div className="space-y-2">
