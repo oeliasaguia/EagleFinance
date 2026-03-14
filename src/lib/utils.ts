@@ -7,10 +7,11 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatCurrency(value: number) {
+  const safeValue = isNaN(value) || value === null || value === undefined ? 0 : value;
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: 'BRL',
-  }).format(value);
+  }).format(safeValue);
 }
 
 export function parseFirestoreDate(date: any): Date {

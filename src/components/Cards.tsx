@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Plus, CreditCard, Trash2, Edit2, Loader2, X, 
-  Wallet, Landmark, Smartphone, Banknote, Globe
+  Wallet, Landmark, Smartphone, Banknote, Globe, Search
 } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 import { formatCurrency, cn } from '../lib/utils';
@@ -47,14 +47,15 @@ const Cards: React.FC<CardsProps> = ({ user }) => {
   const [editingCard, setEditingCard] = useState<Card | null>(null);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [cardToDelete, setCardToDelete] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
   const { showToast } = useToast();
 
-  const [newCard, setNewCard] = useState<Omit<Card, 'uid'>>({
+  const [newCard, setNewCard] = useState({
     name: '',
     bank: '',
-    limit: 0,
-    currentBalance: 0,
-    color: '#6366f1',
+    limit: '',
+    currentBalance: '',
+    color: '#000000',
     icon: 'CreditCard'
   });
 
@@ -82,10 +83,16 @@ const Cards: React.FC<CardsProps> = ({ user }) => {
     setIsLoading(true);
 
     try {
+      const limitNum = parseFloat(newCard.limit.toString()) || 0;
+      const balanceNum = parseFloat(newCard.currentBalance.toString()) || 0;
+
       const data = {
-        ...newCard,
-        limit: parseFloat(newCard.limit.toString()),
-        currentBalance: parseFloat(newCard.currentBalance.toString()),
+        name: newCard.name,
+        bank: newCard.bank,
+        limit: limitNum,
+        currentBalance: balanceNum,
+        color: newCard.color,
+        icon: newCard.icon,
         uid: user.uid,
         updatedAt: serverTimestamp()
       };
@@ -102,7 +109,7 @@ const Cards: React.FC<CardsProps> = ({ user }) => {
       }
 
       setIsModalOpen(false);
-      setNewCard({ name: '', bank: '', limit: 0, currentBalance: 0, color: '#6366f1', icon: 'CreditCard' });
+      setNewCard({ name: '', bank: '', limit: '', currentBalance: '', color: '#000000', icon: 'CreditCard' });
       setEditingCard(null);
     } catch (error) {
       handleFirestoreError(error, editingCard ? OperationType.UPDATE : OperationType.CREATE, 'cards');
@@ -132,63 +139,93 @@ const Cards: React.FC<CardsProps> = ({ user }) => {
     setNewCard({
       name: card.name,
       bank: card.bank,
-      limit: card.limit,
-      currentBalance: card.currentBalance,
+      limit: card.limit.toString(),
+      currentBalance: card.currentBalance.toString(),
       color: card.color,
       icon: card.icon || 'CreditCard'
     });
     setIsModalOpen(true);
   };
 
+  const filteredCards = cards.filter(c => 
+    c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    c.bank.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Meus Cartões</h1>
-          <p className="text-slate-500 mt-1 font-medium">Gerencie seus cartões de crédito e contas bancárias.</p>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Meus Cartões</h1>
+          <p className="text-slate-500 text-xs font-medium">Gerencie seus cartões de crédito e contas bancárias.</p>
         </div>
         <button 
           onClick={() => {
             setEditingCard(null);
-            setNewCard({ name: '', bank: '', limit: 0, currentBalance: 0, color: '#6366f1', icon: 'CreditCard' });
+            setNewCard({ name: '', bank: '', limit: '', currentBalance: '', color: '#000000', icon: 'CreditCard' });
             setIsModalOpen(true);
           }}
-          className="btn-primary flex items-center gap-2"
+          className="btn-primary flex items-center justify-center gap-2 w-full md:w-auto"
         >
           <Plus size={18} />
           Novo Cartão
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {cards.length === 0 ? (
-          <div className="col-span-full py-20 text-center modern-card border-dashed">
-            <CreditCard className="mx-auto text-slate-300 mb-4" size={48} />
-            <p className="text-slate-400 font-medium">Nenhum cartão cadastrado.</p>
-          </div>
-        ) : (
-          cards.map((card) => (
-            <div 
-              key={card.id} 
-              className="relative overflow-hidden rounded-3xl p-8 text-white shadow-2xl transition-all hover:-translate-y-2 group"
-              style={{ 
-                background: `linear-gradient(135deg, ${card.color}, ${card.color}dd)`,
-                boxShadow: `0 20px 40px -15px ${card.color}66`
-              }}
-            >
-              {/* Decorative circles */}
-              <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-3xl" />
-              <div className="absolute -left-10 -bottom-10 w-40 h-40 bg-black/10 rounded-full blur-3xl" />
+      <div className="modern-card">
+        <div className="relative mb-4">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <input 
+            type="text" 
+            placeholder="Pesquisar por nome ou banco..." 
+            className="input-field pl-12"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
 
-              <div className="relative z-10 flex flex-col h-full">
-                <div className="flex justify-between items-start mb-12">
-                  <div className="p-3 bg-white/20 backdrop-blur-md rounded-2xl">
-                    <IconRenderer name={card.icon || 'CreditCard'} size={28} />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredCards.length === 0 ? (
+            <div className="col-span-full py-10 text-center">
+              <CreditCard className="mx-auto text-slate-300 mb-2" size={32} />
+              <p className="text-slate-400 text-sm font-medium">Nenhum cartão encontrado.</p>
+            </div>
+          ) : (
+            filteredCards.map((card) => (
+              <div 
+                key={card.id} 
+                className="p-4 rounded-2xl bg-slate-50/50 border border-slate-100 flex flex-col gap-3 group transition-all hover:border-accent/20"
+              >
+                <div className="flex justify-between items-start">
+                  <div className="flex items-center gap-3">
+                    <div 
+                      className="w-10 h-10 rounded-xl flex items-center justify-center shadow-sm"
+                      style={{ backgroundColor: `${card.color}15`, color: card.color }}
+                    >
+                      <IconRenderer name={card.icon || 'CreditCard'} size={20} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-900">{card.name}</p>
+                      <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">{card.bank}</p>
+                    </div>
                   </div>
-                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-slate-900">
+                      {formatCurrency(card.currentBalance)}
+                    </p>
+                    <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Saldo Atual</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                  <div className="flex flex-col">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Limite</p>
+                    <p className="text-xs font-bold text-slate-600">{formatCurrency(card.limit)}</p>
+                  </div>
+                  <div className="flex gap-1">
                     <button 
                       onClick={() => openEdit(card)}
-                      className="p-2 bg-white/20 backdrop-blur-md hover:bg-white/40 rounded-xl transition-all"
+                      className="p-2 text-slate-400 hover:text-accent transition-all"
                     >
                       <Edit2 size={16} />
                     </button>
@@ -197,38 +234,16 @@ const Cards: React.FC<CardsProps> = ({ user }) => {
                         setCardToDelete(card.id!);
                         setIsConfirmOpen(true);
                       }}
-                      className="p-2 bg-white/20 backdrop-blur-md hover:bg-rose-500/40 rounded-xl transition-all"
+                      className="p-2 text-slate-400 hover:text-rose-500 transition-all"
                     >
                       <Trash2 size={16} />
                     </button>
                   </div>
                 </div>
-
-                <div className="mt-auto">
-                  <p className="text-white/60 text-xs font-bold uppercase tracking-widest mb-1">{card.bank}</p>
-                  <h3 className="text-xl font-bold mb-6">{card.name}</h3>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <p className="text-white/60 text-[10px] font-bold uppercase tracking-wider mb-1">Saldo Atual</p>
-                      <p className="text-2xl font-bold">{formatCurrency(card.currentBalance)}</p>
-                    </div>
-                    
-                    <div className="flex justify-between items-end">
-                      <div>
-                        <p className="text-white/60 text-[10px] font-bold uppercase tracking-wider mb-1">Limite</p>
-                        <p className="text-sm font-bold">{formatCurrency(card.limit)}</p>
-                      </div>
-                      <div className="w-12 h-8 bg-white/20 backdrop-blur-md rounded-lg flex items-center justify-center">
-                        <div className="w-6 h-4 bg-white/30 rounded-sm" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
               </div>
-            </div>
-          ))
-        )}
+            ))
+          )}
+        </div>
       </div>
 
       {/* Modal */}
@@ -275,22 +290,24 @@ const Cards: React.FC<CardsProps> = ({ user }) => {
                   <label className="stat-label">Limite</label>
                   <input 
                     type="number" 
+                    step="0.01"
                     required
                     placeholder="0,00"
                     className="input-field"
                     value={newCard.limit}
-                    onChange={e => setNewCard({...newCard, limit: parseFloat(e.target.value)})}
+                    onChange={e => setNewCard({...newCard, limit: e.target.value})}
                   />
                 </div>
                 <div className="space-y-2">
                   <label className="stat-label">Saldo Atual</label>
                   <input 
                     type="number" 
+                    step="0.01"
                     required
                     placeholder="0,00"
                     className="input-field"
                     value={newCard.currentBalance}
-                    onChange={e => setNewCard({...newCard, currentBalance: parseFloat(e.target.value)})}
+                    onChange={e => setNewCard({...newCard, currentBalance: e.target.value})}
                   />
                 </div>
               </div>
