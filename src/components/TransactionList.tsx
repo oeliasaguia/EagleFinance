@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Search, Filter, Edit2, Trash2, Loader2, X, Tag } from 'lucide-react';
+import ConfirmModal from './ConfirmModal';
 import { formatCurrency, cn } from '../lib/utils';
 import { Transaction } from '../types';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firebase-errors';
+import { useToast } from './Toast';
 
 import { User as FirebaseUser } from 'firebase/auth';
 
@@ -20,7 +22,9 @@ interface TransactionListProps {
 }
 
 const TransactionList: React.FC<TransactionListProps> = ({ type, user }) => {
+  const { showToast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,6 +35,10 @@ const TransactionList: React.FC<TransactionListProps> = ({ type, user }) => {
     amount: '',
     category: '',
     date: new Date().toISOString().split('T')[0]
+  });
+  const [confirmDelete, setConfirmDelete] = useState<{ isOpen: boolean; id: string | null }>({
+    isOpen: false,
+    id: null
   });
 
   useEffect(() => {
@@ -104,11 +112,13 @@ const TransactionList: React.FC<TransactionListProps> = ({ type, user }) => {
 
       if (editingTransaction?.id) {
         await updateDoc(doc(db, 'transactions', editingTransaction.id), payload);
+        showToast(`${type === 'income' ? 'Receita' : 'Despesa'} atualizada com sucesso!`);
       } else {
         await addDoc(collection(db, 'transactions'), {
           ...payload,
           createdAt: serverTimestamp()
         });
+        showToast(`${type === 'income' ? 'Receita' : 'Despesa'} registrada com sucesso!`);
       }
 
       setIsModalOpen(false);
@@ -125,9 +135,9 @@ const TransactionList: React.FC<TransactionListProps> = ({ type, user }) => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Tem certeza que deseja excluir esta transação?')) return;
     try {
       await deleteDoc(doc(db, 'transactions', id));
+      showToast(`${type === 'income' ? 'Receita' : 'Despesa'} excluída com sucesso!`);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, 'transactions');
     }
@@ -144,10 +154,16 @@ const TransactionList: React.FC<TransactionListProps> = ({ type, user }) => {
     setIsModalOpen(true);
   };
 
-  const filteredTransactions = transactions.filter(t => 
-    t.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    t.category.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredTransactions = transactions.filter(t => {
+    const matchesSearch = t.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         t.category.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = selectedCategory === 'all' || t.category === selectedCategory;
+    return matchesSearch && matchesCategory;
+  });
+
+  const defaultCategories = type === 'income' 
+    ? ['Salário', 'Investimentos', 'Presentes', 'Vendas', 'Outros']
+    : ['Alimentação', 'Transporte', 'Lazer', 'Saúde', 'Educação', 'Moradia', 'Assinaturas', 'Outros'];
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -181,16 +197,23 @@ const TransactionList: React.FC<TransactionListProps> = ({ type, user }) => {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
           <input 
             type="text" 
-            placeholder="Buscar por descrição..." 
+            placeholder="Buscar por descrição ou categoria..." 
             className="input-field pl-10"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl hover:bg-gray-50 transition-all text-gray-600">
-          <Filter size={18} />
-          Filtros
-        </button>
+        
+        <select 
+          className="input-field md:w-64"
+          value={selectedCategory}
+          onChange={(e) => setSelectedCategory(e.target.value)}
+        >
+          <option value="all">Todas as Categorias</option>
+          {[...new Set(transactions.map(t => t.category))].sort().map(cat => (
+            <option key={cat} value={cat}>{cat}</option>
+          ))}
+        </select>
       </div>
 
       <div className="glass-card overflow-hidden">
@@ -246,7 +269,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ type, user }) => {
                               <Edit2 size={16} />
                             </button>
                             <button 
-                              onClick={() => t.id && handleDelete(t.id)}
+                              onClick={() => t.id && setConfirmDelete({ isOpen: true, id: t.id })}
                               className="p-2 text-gray-400 hover:text-red-500 hover:bg-white rounded-lg transition-all"
                             >
                               <Trash2 size={16} />
@@ -293,7 +316,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ type, user }) => {
                           <Edit2 size={16} />
                         </button>
                         <button 
-                          onClick={() => t.id && handleDelete(t.id)}
+                          onClick={() => t.id && setConfirmDelete({ isOpen: true, id: t.id })}
                           className="p-2 text-gray-400 hover:text-red-500"
                         >
                           <Trash2 size={16} />
@@ -347,30 +370,31 @@ const TransactionList: React.FC<TransactionListProps> = ({ type, user }) => {
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-bold text-gray-600">Categoria</label>
-                {categories.length > 0 ? (
-                  <select 
+                <div className="relative">
+                  <input 
+                    list="category-suggestions"
                     className="input-field"
+                    placeholder="Selecione ou digite uma categoria"
                     value={formData.category}
                     onChange={e => setFormData({...formData, category: e.target.value})}
                     required
-                  >
-                    <option value="" disabled>Selecione uma categoria</option>
-                    {categories.map(cat => (
-                      <option key={cat.id} value={cat.name}>{cat.name}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <div className="space-y-2">
-                    <input 
-                      type="text" 
-                      required
-                      placeholder="Ex: Lazer, Alimentação..."
-                      className="input-field"
-                      value={formData.category}
-                      onChange={e => setFormData({...formData, category: e.target.value})}
-                    />
-                    <p className="text-xs text-brand-gold">Dica: Cadastre categorias na seção "Categorias" para facilitar.</p>
-                  </div>
+                  />
+                  <datalist id="category-suggestions">
+                    {categories.length > 0 ? (
+                      categories.map(cat => (
+                        <option key={cat.id} value={cat.name} />
+                      ))
+                    ) : (
+                      defaultCategories.map(cat => (
+                        <option key={cat} value={cat} />
+                      ))
+                    )}
+                  </datalist>
+                </div>
+                {categories.length === 0 && (
+                  <p className="text-xs text-brand-gold">
+                    Dica: Você pode cadastrar categorias personalizadas na seção "Categorias".
+                  </p>
                 )}
               </div>
               <div className="space-y-2">
@@ -391,6 +415,14 @@ const TransactionList: React.FC<TransactionListProps> = ({ type, user }) => {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={confirmDelete.isOpen}
+        onClose={() => setConfirmDelete({ isOpen: false, id: null })}
+        onConfirm={() => confirmDelete.id && handleDelete(confirmDelete.id)}
+        title={`Excluir ${type === 'income' ? 'Receita' : 'Despesa'}`}
+        message={`Tem certeza que deseja excluir esta ${type === 'income' ? 'receita' : 'despesa'}? Esta ação não poderá ser desfeita.`}
+      />
     </div>
   );
 };

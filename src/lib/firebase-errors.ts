@@ -29,6 +29,16 @@ export interface FirestoreErrorInfo {
 }
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  // Ignore cancellation errors
+  if (error instanceof Error && (
+    error.message.includes('user aborted a request') || 
+    (error as any).code === 'cancelled' ||
+    (error as any).code === 'unavailable'
+  )) {
+    console.warn('Firestore request cancelled or service unavailable:', error.message);
+    return;
+  }
+
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {

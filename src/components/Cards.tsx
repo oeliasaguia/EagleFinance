@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, CreditCard as CardIcon, Edit2, Loader2, X, Trash2, ShoppingBag } from 'lucide-react';
+import ConfirmModal from './ConfirmModal';
 import { formatCurrency, cn } from '../lib/utils';
 import { CreditCard, CardPurchase } from '../types';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firebase-errors';
+import { useToast } from './Toast';
 
 import { User as FirebaseUser } from 'firebase/auth';
 
@@ -13,11 +15,14 @@ interface CardsProps {
 }
 
 const Cards: React.FC<CardsProps> = ({ user }) => {
+  const { showToast } = useToast();
   const [cards, setCards] = useState<CreditCard[]>([]);
   const [purchases, setPurchases] = useState<CardPurchase[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingCard, setEditingCard] = useState<CreditCard | null>(null);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -32,6 +37,10 @@ const Cards: React.FC<CardsProps> = ({ user }) => {
     amount: '',
     category: 'Outros',
     date: new Date().toISOString().split('T')[0]
+  });
+  const [confirmDelete, setConfirmDelete] = useState<{ isOpen: boolean; id: string | null }>({
+    isOpen: false,
+    id: null
   });
 
   useEffect(() => {
@@ -51,8 +60,11 @@ const Cards: React.FC<CardsProps> = ({ user }) => {
       
       setCards(data);
       setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'cards');
+      setError(null);
+    }, (err) => {
+      console.error('Error fetching cards:', err);
+      setError('Erro ao carregar cartões. Verifique suas permissões.');
+      setLoading(false);
     });
 
     // Fetch Purchases
@@ -67,8 +79,8 @@ const Cards: React.FC<CardsProps> = ({ user }) => {
         ...doc.data()
       })) as CardPurchase[];
       setPurchases(data);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'cardPurchases');
+    }, (err) => {
+      console.error('Error fetching purchases:', err);
     });
 
     return () => {
@@ -87,6 +99,7 @@ const Cards: React.FC<CardsProps> = ({ user }) => {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       const payload = {
         uid: user.uid,
@@ -100,11 +113,13 @@ const Cards: React.FC<CardsProps> = ({ user }) => {
 
       if (editingCard?.id) {
         await updateDoc(doc(db, 'cards', editingCard.id), payload);
+        showToast('Cartão atualizado com sucesso!');
       } else {
         await addDoc(collection(db, 'cards'), {
           ...payload,
           createdAt: serverTimestamp()
         });
+        showToast('Cartão cadastrado com sucesso!');
       }
 
       setIsModalOpen(false);
@@ -118,6 +133,8 @@ const Cards: React.FC<CardsProps> = ({ user }) => {
       });
     } catch (error) {
       handleFirestoreError(error, editingCard ? OperationType.UPDATE : OperationType.CREATE, 'cards');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -131,6 +148,7 @@ const Cards: React.FC<CardsProps> = ({ user }) => {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       await addDoc(collection(db, 'cardPurchases'), {
         uid: user.uid,
@@ -142,6 +160,7 @@ const Cards: React.FC<CardsProps> = ({ user }) => {
         createdAt: serverTimestamp()
       });
 
+      showToast('Compra registrada com sucesso!');
       setIsPurchaseModalOpen(false);
       setPurchaseData({
         description: '',
@@ -149,17 +168,32 @@ const Cards: React.FC<CardsProps> = ({ user }) => {
         category: 'Outros',
         date: new Date().toISOString().split('T')[0]
       });
+      setSelectedCardId(null);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'cardPurchases');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Tem certeza que deseja excluir este cartão?')) return;
+    setIsSubmitting(true);
     try {
+      // Delete the card
       await deleteDoc(doc(db, 'cards', id));
+      
+      // Delete all purchases associated with this card
+      const cardPurchasesRefs = purchases.filter(p => p.cardId === id);
+      const deletePromises = cardPurchasesRefs.map(p => 
+        p.id ? deleteDoc(doc(db, 'cardPurchases', p.id)) : Promise.resolve()
+      );
+      await Promise.all(deletePromises);
+      
+      showToast('Cartão excluído com sucesso!');
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, 'cards');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -207,6 +241,13 @@ const Cards: React.FC<CardsProps> = ({ user }) => {
         </button>
       </header>
 
+      {error && (
+        <div className="p-4 bg-rose-50 text-rose-600 rounded-2xl border border-rose-100 flex items-center gap-3 animate-in fade-in">
+          <X className="shrink-0" size={20} />
+          <p className="text-sm font-medium">{error}</p>
+        </div>
+      )}
+
       {loading ? (
         <div className="p-12 flex justify-center">
           <Loader2 className="animate-spin text-brand-gold" size={32} />
@@ -236,7 +277,7 @@ const Cards: React.FC<CardsProps> = ({ user }) => {
                           </div>
                           <span className="font-bold text-lg">{card.name}</span>
                         </div>
-                        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                        <div className="flex gap-2 transition-all">
                           <button 
                             onClick={() => openEdit(card)}
                             className="p-2 hover:bg-white/10 rounded-full transition-all text-gray-400 hover:text-white"
@@ -244,7 +285,7 @@ const Cards: React.FC<CardsProps> = ({ user }) => {
                             <Edit2 size={18} />
                           </button>
                           <button 
-                            onClick={() => card.id && handleDelete(card.id)}
+                            onClick={() => card.id && setConfirmDelete({ isOpen: true, id: card.id })}
                             className="p-2 hover:bg-white/10 rounded-full transition-all text-gray-400 hover:text-red-500"
                           >
                             <Trash2 size={20} />
@@ -396,7 +437,12 @@ const Cards: React.FC<CardsProps> = ({ user }) => {
                 </div>
               </div>
 
-              <button type="submit" className="w-full btn-gold py-4 font-bold text-lg shadow-xl mt-4">
+              <button 
+                type="submit" 
+                disabled={isSubmitting}
+                className="w-full btn-gold py-4 font-bold text-lg shadow-xl mt-4 flex items-center justify-center gap-2"
+              >
+                {isSubmitting && <Loader2 className="animate-spin" size={20} />}
                 {editingCard ? 'Salvar Alterações' : 'Salvar Cartão'}
               </button>
             </form>
@@ -461,13 +507,26 @@ const Cards: React.FC<CardsProps> = ({ user }) => {
                 />
               </div>
 
-              <button type="submit" className="w-full btn-gold py-4 font-bold text-lg shadow-xl mt-4">
+              <button 
+                type="submit" 
+                disabled={isSubmitting}
+                className="w-full btn-gold py-4 font-bold text-lg shadow-xl mt-4 flex items-center justify-center gap-2"
+              >
+                {isSubmitting && <Loader2 className="animate-spin" size={20} />}
                 Salvar Compra
               </button>
             </form>
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={confirmDelete.isOpen}
+        onClose={() => setConfirmDelete({ isOpen: false, id: null })}
+        onConfirm={() => confirmDelete.id && handleDelete(confirmDelete.id)}
+        title="Excluir Cartão"
+        message="Tem certeza que deseja excluir este cartão? Todas as compras associadas a ele também serão afetadas."
+      />
     </div>
   );
 };

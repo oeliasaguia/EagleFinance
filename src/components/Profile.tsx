@@ -5,6 +5,7 @@ import { auth, db } from '../firebase';
 import { updateProfile } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firebase-errors';
+import { useToast } from './Toast';
 
 import { User as FirebaseUser } from 'firebase/auth';
 
@@ -13,6 +14,7 @@ interface ProfileProps {
 }
 
 const Profile: React.FC<ProfileProps> = ({ user }) => {
+  const { showToast } = useToast();
   const [displayName, setDisplayName] = useState(user.displayName || '');
   const [currency, setCurrency] = useState('BRL');
   const [language, setLanguage] = useState('pt-BR');
@@ -55,7 +57,7 @@ const Profile: React.FC<ProfileProps> = ({ user }) => {
         updatedAt: new Date().toISOString()
       }, { merge: true });
 
-      alert('Perfil atualizado com sucesso!');
+      showToast('Perfil atualizado com sucesso!');
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, 'users');
     } finally {

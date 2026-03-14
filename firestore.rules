@@ -119,7 +119,7 @@ service cloud.firestore {
       allow delete: if isDocOwner();
     }
 
-    match /creditCards/{cardId} {
+    match /cards/{cardId} {
       allow read: if isDocOwner();
       allow create: if isRequestOwner() && isValidCreditCard(request.resource.data);
       allow update: if isDocOwner() && isRequestOwner() && isValidCreditCard(request.resource.data);

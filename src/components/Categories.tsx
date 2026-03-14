@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Edit2, Loader2, X, Tag } from 'lucide-react';
+import ConfirmModal from './ConfirmModal';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firebase-errors';
+import { useToast } from './Toast';
 import { User as FirebaseUser } from 'firebase/auth';
 
 interface Category {
@@ -17,6 +19,7 @@ interface CategoriesProps {
 }
 
 const Categories: React.FC<CategoriesProps> = ({ user }) => {
+  const { showToast } = useToast();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -24,6 +27,11 @@ const Categories: React.FC<CategoriesProps> = ({ user }) => {
   const [newCategory, setNewCategory] = useState({
     name: '',
     type: 'expense' as 'income' | 'expense'
+  });
+  const [isCreatingDefaults, setIsCreatingDefaults] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<{ isOpen: boolean; id: string | null }>({
+    isOpen: false,
+    id: null
   });
 
   useEffect(() => {
@@ -65,6 +73,7 @@ const Categories: React.FC<CategoriesProps> = ({ user }) => {
           type: newCategory.type,
           updatedAt: serverTimestamp()
         });
+        showToast('Categoria atualizada com sucesso!');
       } else {
         await addDoc(collection(db, 'categories'), {
           uid: user.uid,
@@ -72,6 +81,7 @@ const Categories: React.FC<CategoriesProps> = ({ user }) => {
           type: newCategory.type,
           createdAt: serverTimestamp()
         });
+        showToast('Categoria criada com sucesso!');
       }
       setIsModalOpen(false);
       setEditingCategory(null);
@@ -81,10 +91,47 @@ const Categories: React.FC<CategoriesProps> = ({ user }) => {
     }
   };
 
+  const createDefaultCategories = async () => {
+    if (!user || isCreatingDefaults) return;
+    setIsCreatingDefaults(true);
+
+    const defaults: { name: string; type: 'income' | 'expense' }[] = [
+      { name: 'Salário', type: 'income' },
+      { name: 'Investimentos', type: 'income' },
+      { name: 'Presentes', type: 'income' },
+      { name: 'Outros (Receita)', type: 'income' },
+      { name: 'Alimentação', type: 'expense' },
+      { name: 'Transporte', type: 'expense' },
+      { name: 'Lazer', type: 'expense' },
+      { name: 'Saúde', type: 'expense' },
+      { name: 'Educação', type: 'expense' },
+      { name: 'Moradia', type: 'expense' },
+      { name: 'Assinaturas', type: 'expense' },
+      { name: 'Outros (Despesa)', type: 'expense' },
+    ];
+
+    try {
+      const promises = defaults.map(cat => 
+        addDoc(collection(db, 'categories'), {
+          uid: user.uid,
+          name: cat.name,
+          type: cat.type,
+          createdAt: serverTimestamp()
+        })
+      );
+      await Promise.all(promises);
+      showToast('Categorias padrão criadas com sucesso!');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'categories');
+    } finally {
+      setIsCreatingDefaults(false);
+    }
+  };
+
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Tem certeza que deseja excluir esta categoria?')) return;
     try {
       await deleteDoc(doc(db, 'categories', id));
+      showToast('Categoria excluída com sucesso!');
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, 'categories');
     }
@@ -123,8 +170,22 @@ const Categories: React.FC<CategoriesProps> = ({ user }) => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {categories.length === 0 ? (
-            <div className="col-span-full p-12 text-center text-gray-400 glass-card">
-              Nenhuma categoria cadastrada.
+            <div className="col-span-full p-12 text-center glass-card flex flex-col items-center gap-6">
+              <div className="p-4 bg-gray-50 rounded-full text-gray-400">
+                <Tag size={48} />
+              </div>
+              <div className="space-y-2">
+                <p className="text-xl font-bold text-brand-dark">Nenhuma categoria cadastrada</p>
+                <p className="text-gray-500">Comece criando suas próprias categorias ou use as sugestões padrão.</p>
+              </div>
+              <button 
+                onClick={createDefaultCategories}
+                disabled={isCreatingDefaults}
+                className="btn-gold px-8 flex items-center gap-2 disabled:opacity-50"
+              >
+                {isCreatingDefaults ? <Loader2 className="animate-spin" size={20} /> : <Plus size={20} />}
+                Criar Categorias Padrão
+              </button>
             </div>
           ) : (
             categories.map((cat) => (
@@ -133,7 +194,7 @@ const Categories: React.FC<CategoriesProps> = ({ user }) => {
                   <div className={`p-3 rounded-xl ${cat.type === 'income' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
                     <Tag size={24} />
                   </div>
-                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                  <div className="flex gap-2 transition-all">
                     <button 
                       onClick={() => openEdit(cat)}
                       className="p-2 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-brand-dark"
@@ -141,7 +202,7 @@ const Categories: React.FC<CategoriesProps> = ({ user }) => {
                       <Edit2 size={16} />
                     </button>
                     <button 
-                      onClick={() => cat.id && handleDelete(cat.id)}
+                      onClick={() => cat.id && setConfirmDelete({ isOpen: true, id: cat.id })}
                       className="p-2 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-red-500"
                     >
                       <Trash2 size={16} />
@@ -208,6 +269,14 @@ const Categories: React.FC<CategoriesProps> = ({ user }) => {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={confirmDelete.isOpen}
+        onClose={() => setConfirmDelete({ isOpen: false, id: null })}
+        onConfirm={() => confirmDelete.id && handleDelete(confirmDelete.id)}
+        title="Excluir Categoria"
+        message="Tem certeza que deseja excluir esta categoria? Esta ação não poderá ser desfeita."
+      />
     </div>
   );
 };

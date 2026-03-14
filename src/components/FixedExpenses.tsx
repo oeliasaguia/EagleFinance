@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, CheckCircle2, Clock, Trash2, Edit2, Loader2, X } from 'lucide-react';
+import ConfirmModal from './ConfirmModal';
 import { formatCurrency, cn } from '../lib/utils';
 import { FixedExpense } from '../types';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firebase-errors';
+import { useToast } from './Toast';
 
 import { User as FirebaseUser } from 'firebase/auth';
 
@@ -19,6 +21,7 @@ interface FixedExpensesProps {
 }
 
 const FixedExpenses: React.FC<FixedExpensesProps> = ({ user }) => {
+  const { showToast } = useToast();
   const [expenses, setExpenses] = useState<FixedExpense[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,6 +32,10 @@ const FixedExpenses: React.FC<FixedExpensesProps> = ({ user }) => {
     amount: '',
     category: '',
     dueDay: '1'
+  });
+  const [confirmDelete, setConfirmDelete] = useState<{ isOpen: boolean; id: string | null }>({
+    isOpen: false,
+    id: null
   });
 
   useEffect(() => {
@@ -98,12 +105,14 @@ const FixedExpenses: React.FC<FixedExpensesProps> = ({ user }) => {
 
       if (editingExpense?.id) {
         await updateDoc(doc(db, 'fixedExpenses', editingExpense.id), payload);
+        showToast('Despesa atualizada com sucesso!');
       } else {
         await addDoc(collection(db, 'fixedExpenses'), {
           ...payload,
           status: 'pending',
           createdAt: serverTimestamp()
         });
+        showToast('Despesa cadastrada com sucesso!');
       }
 
       setIsModalOpen(false);
@@ -124,15 +133,16 @@ const FixedExpenses: React.FC<FixedExpensesProps> = ({ user }) => {
       await updateDoc(doc(db, 'fixedExpenses', id), {
         status: currentStatus === 'paid' ? 'pending' : 'paid'
       });
+      showToast(`Despesa marcada como ${currentStatus === 'paid' ? 'pendente' : 'paga'}!`);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, 'fixedExpenses');
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Tem certeza que deseja excluir esta despesa fixa?')) return;
     try {
       await deleteDoc(doc(db, 'fixedExpenses', id));
+      showToast('Despesa excluída com sucesso!');
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, 'fixedExpenses');
     }
@@ -202,7 +212,7 @@ const FixedExpenses: React.FC<FixedExpensesProps> = ({ user }) => {
                       <Edit2 size={16} />
                     </button>
                     <button 
-                      onClick={() => expense.id && handleDelete(expense.id)}
+                      onClick={() => expense.id && setConfirmDelete({ isOpen: true, id: expense.id })}
                       className="p-2 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-red-500"
                     >
                       <Trash2 size={16} />
@@ -274,30 +284,31 @@ const FixedExpenses: React.FC<FixedExpensesProps> = ({ user }) => {
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-bold text-gray-600">Categoria</label>
-                {categories.length > 0 ? (
-                  <select 
+                <div className="relative">
+                  <input 
+                    list="fixed-category-suggestions"
                     className="input-field"
+                    placeholder="Selecione ou digite uma categoria"
                     value={formData.category}
                     onChange={e => setFormData({...formData, category: e.target.value})}
                     required
-                  >
-                    <option value="" disabled>Selecione uma categoria</option>
-                    {categories.map(cat => (
-                      <option key={cat.id} value={cat.name}>{cat.name}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <div className="space-y-2">
-                    <input 
-                      type="text" 
-                      required
-                      placeholder="Ex: Moradia, Serviços..."
-                      className="input-field"
-                      value={formData.category}
-                      onChange={e => setFormData({...formData, category: e.target.value})}
-                    />
-                    <p className="text-xs text-brand-gold">Dica: Cadastre categorias na seção "Categorias" para facilitar.</p>
-                  </div>
+                  />
+                  <datalist id="fixed-category-suggestions">
+                    {categories.length > 0 ? (
+                      categories.map(cat => (
+                        <option key={cat.id} value={cat.name} />
+                      ))
+                    ) : (
+                      ['Alimentação', 'Transporte', 'Lazer', 'Saúde', 'Educação', 'Moradia', 'Assinaturas', 'Outros'].map(cat => (
+                        <option key={cat} value={cat} />
+                      ))
+                    )}
+                  </datalist>
+                </div>
+                {categories.length === 0 && (
+                  <p className="text-xs text-brand-gold">
+                    Dica: Você pode cadastrar categorias personalizadas na seção "Categorias".
+                  </p>
                 )}
               </div>
               <div className="space-y-2">
@@ -320,6 +331,14 @@ const FixedExpenses: React.FC<FixedExpensesProps> = ({ user }) => {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={confirmDelete.isOpen}
+        onClose={() => setConfirmDelete({ isOpen: false, id: null })}
+        onConfirm={() => confirmDelete.id && handleDelete(confirmDelete.id)}
+        title="Excluir Despesa Fixa"
+        message="Tem certeza que deseja excluir esta despesa fixa? Esta ação não poderá ser desfeita."
+      />
     </div>
   );
 };
