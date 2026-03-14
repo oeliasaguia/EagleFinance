@@ -71,7 +71,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         "fixed left-0 top-0 h-screen bg-white transition-all duration-500 z-50 flex flex-col border-r border-slate-100 shadow-xl shadow-slate-200/20",
         isOpen ? "translate-x-0 w-72" : "-translate-x-full lg:translate-x-0 lg:w-24"
       )}>
-        <div className="p-8 flex items-center gap-3">
+        <div className="p-4 flex items-center gap-3">
           <div className="w-10 h-10 bg-accent rounded-xl flex items-center justify-center text-white shadow-lg shadow-accent/20">
             <Wallet size={20} />
           </div>
@@ -82,13 +82,13 @@ const Sidebar: React.FC<SidebarProps> = ({
           )}
         </div>
 
-        <nav className="flex-1 px-4 mt-10 space-y-2 overflow-y-auto custom-scrollbar">
+        <nav className="flex-1 px-4 mt-4 space-y-1 overflow-y-auto custom-scrollbar">
           {menuItems.map((item) => (
             <button
               key={item.id}
               onClick={() => handleSectionSelect(item.id)}
               className={cn(
-                "w-full flex items-center gap-4 p-4 rounded-xl transition-all duration-300 group relative",
+                "w-full flex items-center gap-4 p-3 rounded-xl transition-all duration-300 group relative",
                 activeSection === item.id 
                   ? "bg-accent-soft text-accent" 
                   : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
@@ -107,22 +107,22 @@ const Sidebar: React.FC<SidebarProps> = ({
           ))}
         </nav>
 
-        <div className="p-6 mt-auto border-t border-slate-50">
+        <div className="p-4 mt-auto border-t border-slate-50">
           <div className={cn(
-            "flex items-center gap-4 p-3 rounded-2xl bg-slate-50 transition-all",
+            "flex items-center gap-4 p-2 rounded-2xl bg-slate-50 transition-all",
             !isOpen && "justify-center bg-transparent"
           )}>
             {user.photoURL ? (
-              <img src={user.photoURL} alt={user.displayName || ''} className="w-10 h-10 rounded-xl shadow-sm object-cover shrink-0" />
+              <img src={user.photoURL} alt={user.displayName || ''} className="w-8 h-8 rounded-lg shadow-sm object-cover shrink-0" />
             ) : (
-              <div className="w-10 h-10 rounded-xl bg-accent/10 text-accent flex items-center justify-center text-sm font-bold shrink-0">
+              <div className="w-8 h-8 rounded-lg bg-accent/10 text-accent flex items-center justify-center text-xs font-bold shrink-0">
                 {userInitials}
               </div>
             )}
             {isOpen && (
               <div className="flex-1 min-w-0 animate-in fade-in duration-500">
-                <p className="text-sm font-bold text-slate-900 truncate">{user.displayName || 'Usuário'}</p>
-                <p className="text-[10px] font-medium text-slate-400 truncate">{user.email}</p>
+                <p className="text-xs font-bold text-slate-900 truncate">{user.displayName || 'Usuário'}</p>
+                <p className="text-[9px] font-medium text-slate-400 truncate">{user.email}</p>
               </div>
             )}
           </div>
@@ -130,12 +130,12 @@ const Sidebar: React.FC<SidebarProps> = ({
           <button
             onClick={onLogout}
             className={cn(
-              "w-full flex items-center gap-4 p-4 mt-4 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all group",
+              "w-full flex items-center gap-4 p-3 mt-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all group",
               !isOpen && "justify-center"
             )}
           >
-            <LogOut size={20} strokeWidth={2} />
-            {isOpen && <span className="text-sm font-semibold">Sair da Conta</span>}
+            <LogOut size={18} strokeWidth={2} />
+            {isOpen && <span className="text-xs font-semibold">Sair da Conta</span>}
           </button>
         </div>
       </aside>

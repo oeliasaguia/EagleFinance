@@ -109,7 +109,7 @@ export default function App() {
           />
           
           <main className={cn(
-            "flex-1 transition-all duration-500 p-4 md:p-8 lg:p-12 min-h-screen",
+            "flex-1 transition-all duration-500 p-4 md:p-6 lg:p-8 min-h-screen",
             isSidebarOpen ? "lg:ml-72" : "lg:ml-24"
           )}>
             <div className="max-w-7xl mx-auto">

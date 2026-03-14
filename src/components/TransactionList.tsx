@@ -176,13 +176,13 @@ const TransactionList: React.FC<TransactionListProps> = ({ type, user }) => {
   );
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
             {type === 'income' ? 'Minhas Receitas' : 'Minhas Despesas'}
           </h1>
-          <p className="text-slate-500 mt-1 font-medium">Gerencie seus registros financeiros com facilidade.</p>
+          <p className="text-slate-500 text-xs font-medium">Gerencie seus registros financeiros com facilidade.</p>
         </div>
         <button 
           onClick={() => {
@@ -205,7 +205,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ type, user }) => {
       </div>
 
       <div className="modern-card">
-        <div className="flex flex-col lg:flex-row gap-4 mb-8">
+        <div className="flex flex-col lg:flex-row gap-4 mb-4">
           <div className="relative flex-1">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input 
@@ -236,28 +236,28 @@ const TransactionList: React.FC<TransactionListProps> = ({ type, user }) => {
           </div>
         </div>
 
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+        <div className="hidden md:block overflow-x-auto custom-scrollbar">
+          <table className="w-full text-left border-collapse min-w-[700px]">
             <thead>
               <tr className="border-b border-slate-50">
-                <th className="pb-4 stat-label">Data</th>
-                <th className="pb-4 stat-label">Descrição</th>
-                <th className="pb-4 stat-label">Categoria</th>
-                <th className="pb-4 stat-label">Pagamento</th>
-                <th className="pb-4 stat-label text-right">Valor</th>
-                <th className="pb-4 stat-label text-right">Ações</th>
+                <th className="pb-3 stat-label whitespace-nowrap">Data</th>
+                <th className="pb-3 stat-label whitespace-nowrap">Descrição</th>
+                <th className="pb-3 stat-label whitespace-nowrap">Categoria</th>
+                <th className="pb-3 stat-label whitespace-nowrap">Pagamento</th>
+                <th className="pb-3 stat-label whitespace-nowrap text-right">Valor</th>
+                <th className="pb-3 stat-label whitespace-nowrap text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {filteredTransactions.map((t) => (
                 <tr key={t.id} className="group hover:bg-slate-50/50 transition-all">
-                  <td className="py-5 text-sm text-slate-500 font-medium">
+                  <td className="py-3 text-sm text-slate-500 font-medium whitespace-nowrap">
                     {t.date.toLocaleDateString('pt-BR')}
                   </td>
-                  <td className="py-5">
+                  <td className="py-3">
                     <span className="text-sm font-bold text-slate-900">{t.description}</span>
                   </td>
-                  <td className="py-5">
+                  <td className="py-3">
                     <div className="flex items-center gap-2">
                       <div className={cn(
                         "w-6 h-6 rounded-lg flex items-center justify-center",
@@ -273,16 +273,16 @@ const TransactionList: React.FC<TransactionListProps> = ({ type, user }) => {
                       </span>
                     </div>
                   </td>
-                  <td className="py-5">
+                  <td className="py-3">
                     <span className="text-xs font-medium text-slate-500">{(t as any).paymentMethod || '-'}</span>
                   </td>
                   <td className={cn(
-                    "py-5 text-sm font-bold text-right",
+                    "py-3 text-sm font-bold text-right whitespace-nowrap",
                     t.type === 'income' ? "text-emerald-600" : "text-rose-600"
                   )}>
                     {t.type === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
                   </td>
-                  <td className="py-5 text-right">
+                  <td className="py-3 text-right">
                     <div className="flex justify-end gap-2 transition-all">
                       <button 
                         onClick={() => openEdit(t)}

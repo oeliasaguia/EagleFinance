@@ -136,12 +136,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
   }
 
   return (
-    <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
       {/* Header Section */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Olá, {user.displayName?.split(' ')[0] || 'Usuário'}</h1>
-          <p className="text-slate-500 mt-1 font-medium">Aqui está o resumo das suas finanças hoje.</p>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Olá, {user.displayName?.split(' ')[0] || 'Usuário'}</h1>
+          <p className="text-slate-500 text-xs font-medium">Aqui está o resumo das suas finanças hoje.</p>
         </div>
         <div className="flex items-center gap-3">
           {/* Report button removed from here as it is now in the sidebar menu */}
@@ -244,39 +244,39 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
 
       {/* Recent Transactions */}
       <div className="modern-card">
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="text-lg font-bold text-slate-900">Transações Recentes</h3>
-            <p className="text-xs text-slate-500 font-medium">Últimos registros realizados</p>
+            <h3 className="text-base font-bold text-slate-900">Transações Recentes</h3>
+            <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">Últimos registros realizados</p>
           </div>
           <button className="text-accent text-xs font-bold hover:underline">Ver tudo</button>
         </div>
-        <div className="space-y-4">
+        <div className="space-y-2">
           {transactions.slice(0, 5).map((t) => (
-            <div key={t.id} className="flex items-center justify-between p-4 hover:bg-slate-50 rounded-xl transition-all group">
-              <div className="flex items-center gap-4">
+            <div key={t.id} className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-xl transition-all group">
+              <div className="flex items-center gap-3">
                 <div className={cn(
-                  "w-10 h-10 rounded-xl flex items-center justify-center",
+                  "w-8 h-8 rounded-lg flex items-center justify-center",
                   t.type === 'income' ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
                 )}>
                   <CategoryIcon 
                     name={categories.find(c => c.name === t.category)?.icon} 
-                    size={18} 
+                    size={14} 
                   />
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-slate-900">{t.description}</p>
-                  <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">{t.category}</p>
+                  <p className="text-xs font-bold text-slate-900">{t.description}</p>
+                  <p className="text-[9px] font-medium text-slate-400 uppercase tracking-wider">{t.category}</p>
                 </div>
               </div>
               <div className="text-right">
                 <p className={cn(
-                  "text-sm font-bold",
+                  "text-xs font-bold",
                   t.type === 'income' ? "text-emerald-600" : "text-rose-600"
                 )}>
                   {t.type === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
                 </p>
-                <p className="text-[10px] font-medium text-slate-400">
+                <p className="text-[9px] font-medium text-slate-400">
                   {t.date.toLocaleDateString('pt-BR')}
                 </p>
               </div>
@@ -293,17 +293,17 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
       {/* Charts Section - Moved to bottom */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 modern-card">
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-lg font-bold text-slate-900">Fluxo de Caixa</h3>
-              <p className="text-xs text-slate-500 font-medium">Acompanhamento semanal de gastos</p>
+              <h3 className="text-base font-bold text-slate-900">Fluxo de Caixa</h3>
+              <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">Acompanhamento semanal</p>
             </div>
-            <select className="text-xs font-bold bg-slate-50 border-none rounded-lg p-2 focus:ring-0">
+            <select className="text-[10px] font-bold bg-slate-50 border-none rounded-lg p-1.5 focus:ring-0">
               <option>Últimos 7 dias</option>
               <option>Últimos 30 dias</option>
             </select>
           </div>
-          <div className="h-[300px] w-full">
+          <div className="h-[220px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData}>
                 <defs>
@@ -317,7 +317,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                   dataKey="name" 
                   axisLine={false} 
                   tickLine={false} 
-                  tick={{fill: '#94a3b8', fontSize: 12, fontWeight: 500}}
+                  tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 500}}
                   dy={10}
                 />
                 <YAxis hide />
@@ -338,17 +338,17 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
         </div>
 
         <div className="modern-card">
-          <h3 className="text-lg font-bold text-slate-900 mb-2">Gastos por Categoria</h3>
-          <p className="text-xs text-slate-500 font-medium mb-8">Distribuição mensal</p>
-          <div className="h-[200px] w-full">
+          <h3 className="text-base font-bold text-slate-900 mb-1">Gastos por Categoria</h3>
+          <p className="text-[10px] text-slate-500 font-medium mb-4 uppercase tracking-wider">Distribuição mensal</p>
+          <div className="h-[160px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={pieData}
                   cx="50%"
                   cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
+                  innerRadius={50}
+                  outerRadius={70}
                   paddingAngle={5}
                   dataKey="value"
                 >
@@ -360,14 +360,14 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
               </PieChart>
             </ResponsiveContainer>
           </div>
-          <div className="space-y-3 mt-6">
+          <div className="space-y-2 mt-4">
             {pieData.map((item) => (
               <div key={item.name} className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full" style={{backgroundColor: item.color}} />
-                  <span className="text-xs font-medium text-slate-600">{item.name}</span>
+                  <span className="text-[10px] font-medium text-slate-600">{item.name}</span>
                 </div>
-                <span className="text-xs font-bold text-slate-900">{item.value}%</span>
+                <span className="text-[10px] font-bold text-slate-900">{item.value}%</span>
               </div>
             ))}
           </div>

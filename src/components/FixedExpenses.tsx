@@ -162,11 +162,11 @@ const FixedExpenses: React.FC<FixedExpensesProps> = ({ user }) => {
   );
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Despesas Fixas</h1>
-          <p className="text-slate-500 mt-1 font-medium">Controle seus compromissos mensais recorrentes.</p>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Despesas Fixas</h1>
+          <p className="text-slate-500 text-xs font-medium">Controle seus compromissos mensais recorrentes.</p>
         </div>
         <button 
           onClick={() => {
@@ -174,7 +174,7 @@ const FixedExpenses: React.FC<FixedExpensesProps> = ({ user }) => {
             setFormData({ description: '', amount: '', dueDate: '1', category: '', status: 'pending' });
             setIsModalOpen(true);
           }}
-          className="btn-primary flex items-center gap-2"
+          className="btn-primary flex items-center justify-center gap-2 w-full md:w-auto"
         >
           <Plus size={18} />
           Nova Despesa Fixa
@@ -182,7 +182,7 @@ const FixedExpenses: React.FC<FixedExpensesProps> = ({ user }) => {
       </div>
 
       <div className="modern-card">
-        <div className="relative mb-8">
+        <div className="relative mb-4">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input 
             type="text" 
@@ -193,31 +193,31 @@ const FixedExpenses: React.FC<FixedExpensesProps> = ({ user }) => {
           />
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+        <div className="hidden md:block overflow-x-auto custom-scrollbar">
+          <table className="w-full text-left border-collapse min-w-[600px]">
             <thead>
               <tr className="border-b border-slate-50">
-                <th className="pb-4 stat-label">Vencimento</th>
-                <th className="pb-4 stat-label">Descrição</th>
-                <th className="pb-4 stat-label">Categoria</th>
-                <th className="pb-4 stat-label text-right">Valor</th>
-                <th className="pb-4 stat-label text-center">Status</th>
-                <th className="pb-4 stat-label text-right">Ações</th>
+                <th className="pb-3 stat-label whitespace-nowrap">Vencimento</th>
+                <th className="pb-3 stat-label whitespace-nowrap">Descrição</th>
+                <th className="pb-3 stat-label whitespace-nowrap">Categoria</th>
+                <th className="pb-3 stat-label whitespace-nowrap text-right">Valor</th>
+                <th className="pb-3 stat-label whitespace-nowrap text-center">Status</th>
+                <th className="pb-3 stat-label whitespace-nowrap text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {filteredExpenses.map((e) => (
                 <tr key={e.id} className="group hover:bg-slate-50/50 transition-all">
-                  <td className="py-5">
+                  <td className="py-3">
                     <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
                       <Calendar size={14} className="text-slate-400" />
                       Dia {e.dueDate}
                     </div>
                   </td>
-                  <td className="py-5">
+                  <td className="py-3">
                     <span className="text-sm font-bold text-slate-900">{e.description}</span>
                   </td>
-                  <td className="py-5">
+                  <td className="py-3">
                     <div className="flex items-center gap-2">
                       <div className={cn(
                         "w-6 h-6 rounded-lg flex items-center justify-center bg-rose-50 text-rose-600"
@@ -232,10 +232,10 @@ const FixedExpenses: React.FC<FixedExpensesProps> = ({ user }) => {
                       </span>
                     </div>
                   </td>
-                  <td className="py-5 text-sm font-bold text-right text-rose-600">
+                  <td className="py-3 text-sm font-bold text-right text-rose-600">
                     {formatCurrency(e.amount)}
                   </td>
-                  <td className="py-5 text-center">
+                  <td className="py-3 text-center">
                     <button 
                       onClick={() => toggleStatus(e)}
                       className={cn(
@@ -249,7 +249,7 @@ const FixedExpenses: React.FC<FixedExpensesProps> = ({ user }) => {
                       {e.status === 'paid' ? 'Pago' : 'Pendente'}
                     </button>
                   </td>
-                  <td className="py-5 text-right">
+                  <td className="py-3 text-right">
                     <div className="flex justify-end gap-2 transition-all">
                       <button 
                         onClick={() => openEdit(e)}
@@ -276,6 +276,72 @@ const FixedExpenses: React.FC<FixedExpensesProps> = ({ user }) => {
             <div className="text-center py-20">
               <AlertCircle className="mx-auto text-slate-300 mb-4" size={48} />
               <p className="text-slate-400 font-medium">Nenhuma despesa fixa encontrada.</p>
+            </div>
+          )}
+        </div>
+
+        {/* Mobile List View */}
+        <div className="md:hidden space-y-4">
+          {filteredExpenses.map((e) => (
+            <div key={e.id} className="p-4 rounded-2xl bg-slate-50/50 border border-slate-100 flex flex-col gap-3">
+              <div className="flex justify-between items-start">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-rose-100 text-rose-600">
+                    <CategoryIcon 
+                      name={categories.find(c => c.name === e.category)?.icon} 
+                      size={20} 
+                    />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">{e.description}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">{e.category}</span>
+                      <span className="text-[10px] font-bold text-slate-400">•</span>
+                      <span className="text-[10px] font-bold text-slate-600">Dia {e.dueDate}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-bold text-rose-600">
+                    {formatCurrency(e.amount)}
+                  </p>
+                  <button 
+                    onClick={() => toggleStatus(e)}
+                    className={cn(
+                      "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider mt-1",
+                      e.status === 'paid' 
+                        ? "bg-emerald-50 text-emerald-600" 
+                        : "bg-amber-50 text-amber-600"
+                    )}
+                  >
+                    {e.status === 'paid' ? 'Pago' : 'Pendente'}
+                  </button>
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-end pt-2 border-t border-slate-100 gap-1">
+                <button 
+                  onClick={() => openEdit(e)}
+                  className="p-2 text-slate-400 hover:text-accent"
+                >
+                  <Edit2 size={16} />
+                </button>
+                <button 
+                  onClick={() => {
+                    setExpenseToDelete(e.id!);
+                    setIsConfirmOpen(true);
+                  }}
+                  className="p-2 text-slate-400 hover:text-rose-500"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            </div>
+          ))}
+          {filteredExpenses.length === 0 && (
+            <div className="text-center py-10">
+              <AlertCircle className="mx-auto text-slate-300 mb-2" size={32} />
+              <p className="text-slate-400 text-sm font-medium">Nenhuma despesa fixa encontrada.</p>
             </div>
           )}
         </div>
