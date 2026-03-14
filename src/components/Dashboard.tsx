@@ -1,157 +1,243 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  PieChart, Pie, Cell, 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+  TrendingUp, 
+  TrendingDown, 
+  Wallet, 
+  Calendar,
+  ArrowUpRight,
+  ArrowDownRight,
+  Plus,
+  Filter,
+  Download,
+  MoreHorizontal
+} from 'lucide-react';
+import { 
+  AreaChart, 
+  Area, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell
 } from 'recharts';
-import { Wallet, TrendingUp, TrendingDown, CreditCard as CardIcon, Loader2 } from 'lucide-react';
-import { formatCurrency, cn } from '../lib/utils';
 import { db } from '../firebase';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { handleFirestoreError, OperationType } from '../lib/firebase-errors';
-
+import { collection, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
+import { formatCurrency, cn } from '../lib/utils';
 import { User as FirebaseUser } from 'firebase/auth';
 
 interface DashboardProps {
   user: FirebaseUser;
 }
 
+interface Transaction {
+  id: string;
+  description: string;
+  amount: number;
+  category: string;
+  date: Date;
+  type: 'income' | 'expense';
+}
+
 const Dashboard: React.FC<DashboardProps> = ({ user }) => {
-  const [loading, setLoading] = useState(true);
+  const [transactions, setTransactions] = useState<any[]>([]);
   const [summary, setSummary] = useState({
     balance: 0,
     income: 0,
     expenses: 0,
-    cards: 0
+    monthlyChange: 0
   });
-  const [expenseData, setExpenseData] = useState<any[]>([]);
-  const [monthlyData, setMonthlyData] = useState<any[]>([]);
 
   useEffect(() => {
-    if (!user) return;
-
-    // Fetch Transactions
-    const transactionsQuery = query(
+    const q = query(
       collection(db, 'transactions'),
-      where('uid', '==', user.uid)
+      where('uid', '==', user.uid),
+      orderBy('date', 'desc')
     );
 
-    const unsubscribeTransactions = onSnapshot(transactionsQuery, (snapshot) => {
-      const transactions = snapshot.docs.map(doc => doc.data());
-      
-      let totalIncome = 0;
-      let totalExpenses = 0;
-      const categories: Record<string, number> = {};
-      const monthly: Record<string, { month: string, income: number, expenses: number }> = {};
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        date: doc.data().date?.toDate() || new Date()
+      })) as Transaction[];
+      setTransactions(data);
 
-      transactions.forEach(t => {
-        const amount = t.amount || 0;
-        if (t.type === 'income') {
-          totalIncome += amount;
-        } else {
-          totalExpenses += amount;
-          categories[t.category] = (categories[t.category] || 0) + amount;
-        }
-
-        const date = new Date(t.date);
-        const month = date.toLocaleString('default', { month: 'short' });
-        if (!monthly[month]) {
-          monthly[month] = { month, income: 0, expenses: 0 };
-        }
-        if (t.type === 'income') monthly[month].income += amount;
-        else monthly[month].expenses += amount;
+      const income = data.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amount, 0);
+      const expenses = data.filter(t => t.type === 'expense').reduce((acc, t) => acc + t.amount, 0);
+      setSummary({
+        balance: income - expenses,
+        income,
+        expenses,
+        monthlyChange: 12.5 // Mock change for visual
       });
-
-      setSummary(prev => ({
-        ...prev,
-        balance: totalIncome - totalExpenses,
-        income: totalIncome,
-        expenses: totalExpenses
-      }));
-
-      const COLORS = ['#0F172A', '#F59E0B', '#64748B', '#94A3B8', '#CBD5E1'];
-      setExpenseData(Object.entries(categories).map(([name, value], idx) => ({
-        name,
-        value,
-        color: COLORS[idx % COLORS.length]
-      })));
-
-      setMonthlyData(Object.values(monthly));
-      setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'transactions');
     });
 
-    // Fetch Card Purchases
-    const cardPurchasesQuery = query(
-      collection(db, 'cardPurchases'),
-      where('uid', '==', user.uid)
-    );
+    return () => unsubscribe();
+  }, [user.uid]);
 
-    const unsubscribeCardPurchases = onSnapshot(cardPurchasesQuery, (snapshot) => {
-      const purchases = snapshot.docs.map(doc => doc.data());
-      let totalCardExpenses = 0;
-      purchases.forEach(p => {
-        totalCardExpenses += p.amount || 0;
-      });
-      setSummary(prev => ({
-        ...prev,
-        cards: totalCardExpenses
-      }));
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'cardPurchases');
-    });
+  const chartData = [
+    { name: 'Seg', value: 400 },
+    { name: 'Ter', value: 300 },
+    { name: 'Qua', value: 600 },
+    { name: 'Qui', value: 800 },
+    { name: 'Sex', value: 500 },
+    { name: 'Sáb', value: 900 },
+    { name: 'Dom', value: 700 },
+  ];
 
-    return () => {
-      unsubscribeTransactions();
-      unsubscribeCardPurchases();
-    };
-  }, [user]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="animate-spin text-brand-gold" size={32} />
-      </div>
-    );
-  }
+  const pieData = [
+    { name: 'Alimentação', value: 400, color: '#6366f1' },
+    { name: 'Transporte', value: 300, color: '#818cf8' },
+    { name: 'Lazer', value: 200, color: '#a5b4fc' },
+    { name: 'Outros', value: 100, color: '#c7d2fe' },
+  ];
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <header>
-        <h1 className="text-3xl font-bold text-brand-dark">Dashboard</h1>
-        <p className="text-gray-500">Bem-vindo de volta ao seu controle financeiro.</p>
-      </header>
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {[
-          { label: 'Saldo Total', value: summary.balance, icon: Wallet, color: 'text-brand-dark' },
-          { label: 'Receitas (Total)', value: summary.income, icon: TrendingUp, color: 'text-emerald-600' },
-          { label: 'Despesas (Total)', value: summary.expenses, icon: TrendingDown, color: 'text-rose-600' },
-          { label: 'Gastos Cartão', value: summary.cards, icon: CardIcon, color: 'text-brand-gold' },
-        ].map((card, idx) => (
-          <div key={idx} className="glass-card p-6 flex items-center gap-4">
-            <div className={cn("p-3 rounded-xl bg-gray-50", card.color)}>
-              <card.icon size={24} />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 font-medium">{card.label}</p>
-              <p className="text-xl font-bold text-brand-dark">{formatCurrency(card.value)}</p>
-            </div>
-          </div>
-        ))}
+    <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Olá, {user.displayName?.split(' ')[0] || 'Usuário'}</h1>
+          <p className="text-slate-500 mt-1 font-medium">Aqui está o resumo das suas finanças hoje.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button className="btn-secondary flex items-center gap-2">
+            <Download size={18} />
+            Relatório
+          </button>
+          <button className="btn-primary flex items-center gap-2">
+            <Plus size={18} />
+            Novo Registro
+          </button>
+        </div>
       </div>
 
-      {/* Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Expenses by Category */}
-        <div className="glass-card p-6">
-          <h3 className="text-lg font-bold mb-6">Despesas por Categoria</h3>
-          <div className="h-64">
+      {/* Stats Bento Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="modern-card bg-accent text-white border-none">
+          <div className="flex justify-between items-start mb-4">
+            <div className="p-2 bg-white/20 rounded-lg">
+              <Wallet size={20} />
+            </div>
+            <div className="flex items-center gap-1 text-xs font-bold bg-white/20 px-2 py-1 rounded-full">
+              <TrendingUp size={12} />
+              {summary.monthlyChange}%
+            </div>
+          </div>
+          <p className="text-white/70 text-xs font-bold uppercase tracking-wider">Saldo Total</p>
+          <h2 className="text-3xl font-bold mt-1">{formatCurrency(summary.balance)}</h2>
+        </div>
+
+        <div className="modern-card">
+          <div className="flex justify-between items-start mb-4">
+            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
+              <TrendingUp size={20} />
+            </div>
+            <button className="text-slate-400 hover:text-slate-600">
+              <MoreHorizontal size={18} />
+            </button>
+          </div>
+          <p className="stat-label">Receitas</p>
+          <h2 className="stat-value text-emerald-600">{formatCurrency(summary.income)}</h2>
+          <div className="mt-4 flex items-center gap-1 text-[10px] font-bold text-emerald-600">
+            <ArrowUpRight size={12} />
+            <span>+8.2% este mês</span>
+          </div>
+        </div>
+
+        <div className="modern-card">
+          <div className="flex justify-between items-start mb-4">
+            <div className="p-2 bg-rose-50 text-rose-600 rounded-lg">
+              <TrendingDown size={20} />
+            </div>
+            <button className="text-slate-400 hover:text-slate-600">
+              <MoreHorizontal size={18} />
+            </button>
+          </div>
+          <p className="stat-label">Despesas</p>
+          <h2 className="stat-value text-rose-600">{formatCurrency(summary.expenses)}</h2>
+          <div className="mt-4 flex items-center gap-1 text-[10px] font-bold text-rose-600">
+            <ArrowDownRight size={12} />
+            <span>-3.1% este mês</span>
+          </div>
+        </div>
+
+        <div className="modern-card">
+          <div className="flex justify-between items-start mb-4">
+            <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+              <Calendar size={20} />
+            </div>
+            <button className="text-slate-400 hover:text-slate-600">
+              <MoreHorizontal size={18} />
+            </button>
+          </div>
+          <p className="stat-label">Economia Prevista</p>
+          <h2 className="stat-value text-blue-600">{formatCurrency(summary.balance * 1.1)}</h2>
+          <div className="mt-4 flex items-center gap-1 text-[10px] font-bold text-blue-600">
+            <TrendingUp size={12} />
+            <span>Meta de 15%</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Charts Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 modern-card">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">Fluxo de Caixa</h3>
+              <p className="text-xs text-slate-500 font-medium">Acompanhamento semanal de gastos</p>
+            </div>
+            <select className="text-xs font-bold bg-slate-50 border-none rounded-lg p-2 focus:ring-0">
+              <option>Últimos 7 dias</option>
+              <option>Últimos 30 dias</option>
+            </select>
+          </div>
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.1}/>
+                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis 
+                  dataKey="name" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{fill: '#94a3b8', fontSize: 12, fontWeight: 500}}
+                  dy={10}
+                />
+                <YAxis hide />
+                <Tooltip 
+                  contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}}
+                />
+                <Area 
+                  type="monotone" 
+                  dataKey="value" 
+                  stroke="#6366f1" 
+                  strokeWidth={3}
+                  fillOpacity={1} 
+                  fill="url(#colorValue)" 
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="modern-card">
+          <h3 className="text-lg font-bold text-slate-900 mb-2">Gastos por Categoria</h3>
+          <p className="text-xs text-slate-500 font-medium mb-8">Distribuição mensal</p>
+          <div className="h-[200px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={expenseData}
+                  data={pieData}
                   cx="50%"
                   cy="50%"
                   innerRadius={60}
@@ -159,7 +245,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                   paddingAngle={5}
                   dataKey="value"
                 >
-                  {expenseData.map((entry, index) => (
+                  {pieData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
@@ -167,31 +253,62 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
               </PieChart>
             </ResponsiveContainer>
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            {expenseData.map((item, idx) => (
-              <div key={idx} className="flex items-center gap-2 text-sm">
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                <span className="text-gray-600">{item.name}</span>
+          <div className="space-y-3 mt-6">
+            {pieData.map((item) => (
+              <div key={item.name} className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full" style={{backgroundColor: item.color}} />
+                  <span className="text-xs font-medium text-slate-600">{item.name}</span>
+                </div>
+                <span className="text-xs font-bold text-slate-900">{item.value}%</span>
               </div>
             ))}
           </div>
         </div>
+      </div>
 
-        {/* Monthly Evolution */}
-        <div className="glass-card p-6">
-          <h3 className="text-lg font-bold mb-6">Evolução Mensal</h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="month" axisLine={false} tickLine={false} />
-                <YAxis axisLine={false} tickLine={false} tickFormatter={(val) => `R$${val}`} />
-                <Tooltip />
-                <Bar dataKey="income" fill="#0F172A" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="expenses" fill="#F59E0B" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+      {/* Recent Transactions */}
+      <div className="modern-card">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h3 className="text-lg font-bold text-slate-900">Transações Recentes</h3>
+            <p className="text-xs text-slate-500 font-medium">Últimos registros realizados</p>
           </div>
+          <button className="text-accent text-xs font-bold hover:underline">Ver tudo</button>
+        </div>
+        <div className="space-y-4">
+          {transactions.slice(0, 5).map((t) => (
+            <div key={t.id} className="flex items-center justify-between p-4 hover:bg-slate-50 rounded-xl transition-all group">
+              <div className="flex items-center gap-4">
+                <div className={cn(
+                  "w-10 h-10 rounded-xl flex items-center justify-center",
+                  t.type === 'income' ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
+                )}>
+                  {t.type === 'income' ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-slate-900">{t.description}</p>
+                  <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">{t.category}</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className={cn(
+                  "text-sm font-bold",
+                  t.type === 'income' ? "text-emerald-600" : "text-rose-600"
+                )}>
+                  {t.type === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
+                </p>
+                <p className="text-[10px] font-medium text-slate-400">
+                  {t.date.toLocaleDateString('pt-BR')}
+                </p>
+              </div>
+            </div>
+          ))}
+          {transactions.length === 0 && (
+            <div className="text-center py-10">
+              <p className="text-slate-400 text-sm">Nenhuma transação encontrada.</p>
+            </div>
+          )}
         </div>
       </div>
     </div>

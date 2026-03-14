@@ -1,17 +1,47 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit2, Loader2, X, Tag } from 'lucide-react';
+import { 
+  Plus, Trash2, Edit2, Loader2, X, Tag, 
+  ShoppingBag, Car, Utensils, Heart, GraduationCap, 
+  Home, Smartphone, Coffee, Gift, Briefcase, 
+  TrendingUp, TrendingDown, DollarSign, CreditCard
+} from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
+import { formatCurrency, cn } from '../lib/utils';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firebase-errors';
 import { useToast } from './Toast';
 import { User as FirebaseUser } from 'firebase/auth';
 
+const ICON_OPTIONS = [
+  { name: 'Tag', icon: Tag },
+  { name: 'ShoppingBag', icon: ShoppingBag },
+  { name: 'Car', icon: Car },
+  { name: 'Utensils', icon: Utensils },
+  { name: 'Heart', icon: Heart },
+  { name: 'GraduationCap', icon: GraduationCap },
+  { name: 'Home', icon: Home },
+  { name: 'Smartphone', icon: Smartphone },
+  { name: 'Coffee', icon: Coffee },
+  { name: 'Gift', icon: Gift },
+  { name: 'Briefcase', icon: Briefcase },
+  { name: 'TrendingUp', icon: TrendingUp },
+  { name: 'TrendingDown', icon: TrendingDown },
+  { name: 'DollarSign', icon: DollarSign },
+  { name: 'CreditCard', icon: CreditCard },
+];
+
+const IconRenderer = ({ name, size = 24, strokeWidth = 2, className = "" }: { name: string, size?: number, strokeWidth?: number, className?: string }) => {
+  const IconComponent = ICON_OPTIONS.find(i => i.name === name)?.icon || Tag;
+  return <IconComponent size={size} strokeWidth={strokeWidth} className={className} />;
+};
+
 interface Category {
   id?: string;
   uid: string;
   name: string;
   type: 'income' | 'expense';
+  icon?: string;
 }
 
 interface CategoriesProps {
@@ -19,24 +49,22 @@ interface CategoriesProps {
 }
 
 const Categories: React.FC<CategoriesProps> = ({ user }) => {
-  const { showToast } = useToast();
   const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
-  const [newCategory, setNewCategory] = useState({
-    name: '',
-    type: 'expense' as 'income' | 'expense'
-  });
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
   const [isCreatingDefaults, setIsCreatingDefaults] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState<{ isOpen: boolean; id: string | null }>({
-    isOpen: false,
-    id: null
+  const { showToast } = useToast();
+
+  const [newCategory, setNewCategory] = useState<Omit<Category, 'uid'>>({
+    name: '',
+    type: 'expense',
+    icon: 'Tag'
   });
 
   useEffect(() => {
-    if (!user) return;
-
     const q = query(
       collection(db, 'categories'),
       where('uid', '==', user.uid)
@@ -47,200 +75,197 @@ const Categories: React.FC<CategoriesProps> = ({ user }) => {
         id: doc.id,
         ...doc.data()
       })) as Category[];
-      
-      setCategories(data.sort((a, b) => a.name.localeCompare(b.name)));
-      setLoading(false);
+      setCategories(data);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'categories');
     });
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user.uid]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
-
-    if (!newCategory.name.trim()) {
-      alert('Por favor, insira um nome para a categoria.');
-      return;
-    }
+    setIsLoading(true);
 
     try {
-      if (editingCategory?.id) {
-        await updateDoc(doc(db, 'categories', editingCategory.id), {
-          name: newCategory.name.trim(),
-          type: newCategory.type,
-          updatedAt: serverTimestamp()
-        });
-        showToast('Categoria atualizada com sucesso!');
+      const data = {
+        ...newCategory,
+        uid: user.uid,
+        updatedAt: serverTimestamp()
+      };
+
+      if (editingCategory) {
+        await updateDoc(doc(db, 'categories', editingCategory.id!), data);
+        showToast('Categoria atualizada com sucesso!', 'success');
       } else {
         await addDoc(collection(db, 'categories'), {
-          uid: user.uid,
-          name: newCategory.name.trim(),
-          type: newCategory.type,
+          ...data,
           createdAt: serverTimestamp()
         });
-        showToast('Categoria criada com sucesso!');
+        showToast('Categoria criada com sucesso!', 'success');
       }
+
       setIsModalOpen(false);
+      setNewCategory({ name: '', type: 'expense', icon: 'Tag' });
       setEditingCategory(null);
-      setNewCategory({ name: '', type: 'expense' });
     } catch (error) {
       handleFirestoreError(error, editingCategory ? OperationType.UPDATE : OperationType.CREATE, 'categories');
+      showToast('Erro ao salvar categoria.', 'error');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const createDefaultCategories = async () => {
-    if (!user || isCreatingDefaults) return;
-    setIsCreatingDefaults(true);
+  const handleDelete = async () => {
+    if (!categoryToDelete) return;
 
-    const defaults: { name: string; type: 'income' | 'expense' }[] = [
-      { name: 'Salário', type: 'income' },
-      { name: 'Investimentos', type: 'income' },
-      { name: 'Presentes', type: 'income' },
-      { name: 'Outros (Receita)', type: 'income' },
-      { name: 'Alimentação', type: 'expense' },
-      { name: 'Transporte', type: 'expense' },
-      { name: 'Lazer', type: 'expense' },
-      { name: 'Saúde', type: 'expense' },
-      { name: 'Educação', type: 'expense' },
-      { name: 'Moradia', type: 'expense' },
-      { name: 'Assinaturas', type: 'expense' },
-      { name: 'Outros (Despesa)', type: 'expense' },
+    try {
+      await deleteDoc(doc(db, 'categories', categoryToDelete));
+      showToast('Categoria excluída com sucesso!', 'success');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, 'categories');
+      showToast('Erro ao excluir categoria.', 'error');
+    } finally {
+      setIsConfirmOpen(false);
+      setCategoryToDelete(null);
+    }
+  };
+
+  const openEdit = (category: Category) => {
+    setEditingCategory(category);
+    setNewCategory({
+      name: category.name,
+      type: category.type,
+      icon: category.icon || 'Tag'
+    });
+    setIsModalOpen(true);
+  };
+
+  const createDefaultCategories = async () => {
+    setIsCreatingDefaults(true);
+    const defaults: Omit<Category, 'uid'>[] = [
+      { name: 'Alimentação', type: 'expense', icon: 'Utensils' },
+      { name: 'Transporte', type: 'expense', icon: 'Car' },
+      { name: 'Lazer', type: 'expense', icon: 'Coffee' },
+      { name: 'Saúde', type: 'expense', icon: 'Heart' },
+      { name: 'Educação', type: 'expense', icon: 'GraduationCap' },
+      { name: 'Salário', type: 'income', icon: 'DollarSign' },
+      { name: 'Investimentos', type: 'income', icon: 'TrendingUp' },
     ];
 
     try {
-      const promises = defaults.map(cat => 
-        addDoc(collection(db, 'categories'), {
-          uid: user.uid,
-          name: cat.name,
-          type: cat.type,
-          createdAt: serverTimestamp()
-        })
-      );
-      await Promise.all(promises);
-      showToast('Categorias padrão criadas com sucesso!');
+      for (const cat of defaults) {
+        if (!categories.find(c => c.name === cat.name && c.type === cat.type)) {
+          await addDoc(collection(db, 'categories'), {
+            ...cat,
+            uid: user.uid,
+            createdAt: serverTimestamp()
+          });
+        }
+      }
+      showToast('Categorias padrão criadas!', 'success');
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'categories');
+      showToast('Erro ao criar categorias padrão.', 'error');
     } finally {
       setIsCreatingDefaults(false);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'categories', id));
-      showToast('Categoria excluída com sucesso!');
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, 'categories');
-    }
-  };
-
-  const openEdit = (cat: Category) => {
-    setEditingCategory(cat);
-    setNewCategory({ name: cat.name, type: cat.type });
-    setIsModalOpen(true);
-  };
-
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-          <h1 className="text-3xl font-bold text-brand-dark">Categorias</h1>
-          <p className="text-gray-500">Personalize suas categorias de receitas e despesas.</p>
+          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Categorias</h1>
+          <p className="text-slate-500 mt-1 font-medium">Personalize suas categorias de receitas e despesas.</p>
         </div>
-        <button 
-          onClick={() => {
-            setEditingCategory(null);
-            setNewCategory({ name: '', type: 'expense' });
-            setIsModalOpen(true);
-          }}
-          className="btn-primary flex items-center gap-2 self-start"
-        >
-          <Plus size={20} />
-          Nova Categoria
-        </button>
-      </header>
+        <div className="flex gap-3">
+          <button 
+            onClick={createDefaultCategories}
+            disabled={isCreatingDefaults}
+            className="btn-secondary flex items-center gap-2 disabled:opacity-50"
+          >
+            {isCreatingDefaults ? <Loader2 className="animate-spin" size={18} /> : <Plus size={18} />}
+            Padrão
+          </button>
+          <button 
+            onClick={() => {
+              setEditingCategory(null);
+              setNewCategory({ name: '', type: 'expense', icon: 'Tag' });
+              setIsModalOpen(true);
+            }}
+            className="btn-primary flex items-center gap-2"
+          >
+            <Plus size={18} />
+            Nova Categoria
+          </button>
+        </div>
+      </div>
 
-      {loading ? (
-        <div className="p-12 flex justify-center">
-          <Loader2 className="animate-spin text-brand-gold" size={32} />
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {categories.length === 0 ? (
-            <div className="col-span-full p-12 text-center glass-card flex flex-col items-center gap-6">
-              <div className="p-4 bg-gray-50 rounded-full text-gray-400">
-                <Tag size={48} />
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {categories.length === 0 ? (
+          <div className="col-span-full py-20 text-center modern-card border-dashed">
+            <Tag className="mx-auto text-slate-300 mb-4" size={48} />
+            <p className="text-slate-400 font-medium">Nenhuma categoria encontrada.</p>
+            <button 
+              onClick={createDefaultCategories}
+              className="text-accent font-bold mt-2 hover:underline"
+            >
+              Criar categorias padrão
+            </button>
+          </div>
+        ) : (
+          categories.map((cat) => (
+            <div key={cat.id} className="modern-card group">
+              <div className="flex justify-between items-start">
+                <div className={cn(
+                  "p-3 rounded-xl transition-all",
+                  cat.type === 'income' ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
+                )}>
+                  <IconRenderer name={cat.icon || 'Tag'} size={24} />
+                </div>
+                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                  <button 
+                    onClick={() => openEdit(cat)}
+                    className="p-2 text-slate-400 hover:text-accent hover:bg-accent-soft rounded-lg transition-all"
+                  >
+                    <Edit2 size={16} />
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setCategoryToDelete(cat.id!);
+                      setIsConfirmOpen(true);
+                    }}
+                    className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
               </div>
-              <div className="space-y-2">
-                <p className="text-xl font-bold text-brand-dark">Nenhuma categoria cadastrada</p>
-                <p className="text-gray-500">Comece criando suas próprias categorias ou use as sugestões padrão.</p>
+              <div className="mt-6">
+                <h3 className="text-lg font-bold text-slate-900">{cat.name}</h3>
+                <p className="stat-label mt-1">{cat.type === 'income' ? 'Receita' : 'Despesa'}</p>
               </div>
-              <button 
-                onClick={createDefaultCategories}
-                disabled={isCreatingDefaults}
-                className="btn-gold px-8 flex items-center gap-2 disabled:opacity-50"
-              >
-                {isCreatingDefaults ? <Loader2 className="animate-spin" size={20} /> : <Plus size={20} />}
-                Criar Categorias Padrão
-              </button>
             </div>
-          ) : (
-            categories.map((cat) => (
-              <div key={cat.id} className="glass-card p-6 flex flex-col gap-4 relative group">
-                <div className="flex justify-between items-start">
-                  <div className={`p-3 rounded-xl ${cat.type === 'income' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-                    <Tag size={24} />
-                  </div>
-                  <div className="flex gap-2 transition-all">
-                    <button 
-                      onClick={() => openEdit(cat)}
-                      className="p-2 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-brand-dark"
-                    >
-                      <Edit2 size={16} />
-                    </button>
-                    <button 
-                      onClick={() => cat.id && setConfirmDelete({ isOpen: true, id: cat.id })}
-                      className="p-2 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-red-500"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="font-bold text-lg text-brand-dark">{cat.name}</h3>
-                  <p className="text-sm text-gray-500">
-                    {cat.type === 'income' ? 'Receita' : 'Despesa'}
-                  </p>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      )}
+          ))
+        )}
+      </div>
 
       {/* Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-brand-dark/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="glass-card bg-white w-full max-w-md p-8 space-y-6 animate-in zoom-in-95 duration-300">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-brand-dark">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-6 z-50 animate-in fade-in duration-300">
+          <div className="modern-card w-full max-w-lg animate-in zoom-in-95 duration-300">
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-xl font-bold text-slate-900">
                 {editingCategory ? 'Editar Categoria' : 'Nova Categoria'}
               </h2>
-              <button 
-                onClick={() => setIsModalOpen(false)} 
-                className="text-gray-400 hover:text-brand-dark transition-all"
-              >
-                <X size={24} />
+              <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-all">
+                <X size={20} className="text-slate-400" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-6">
               <div className="space-y-2">
-                <label className="text-sm font-bold text-gray-600">Nome da Categoria</label>
+                <label className="stat-label">Nome da Categoria</label>
                 <input 
                   type="text" 
                   required
@@ -250,8 +275,9 @@ const Categories: React.FC<CategoriesProps> = ({ user }) => {
                   onChange={e => setNewCategory({...newCategory, name: e.target.value})}
                 />
               </div>
+
               <div className="space-y-2">
-                <label className="text-sm font-bold text-gray-600">Tipo</label>
+                <label className="stat-label">Tipo</label>
                 <select 
                   className="input-field"
                   value={newCategory.type}
@@ -262,20 +288,54 @@ const Categories: React.FC<CategoriesProps> = ({ user }) => {
                 </select>
               </div>
 
-              <button type="submit" className="w-full btn-gold py-4 font-bold text-lg shadow-xl mt-4">
-                {editingCategory ? 'Salvar Alterações' : 'Criar Categoria'}
-              </button>
+              <div className="space-y-4">
+                <label className="stat-label">Ícone</label>
+                <div className="grid grid-cols-5 gap-3 max-h-48 overflow-y-auto p-2 custom-scrollbar bg-slate-50 rounded-xl">
+                  {ICON_OPTIONS.map((option) => (
+                    <button
+                      key={option.name}
+                      type="button"
+                      onClick={() => setNewCategory({ ...newCategory, icon: option.name })}
+                      className={cn(
+                        "p-3 flex items-center justify-center rounded-xl transition-all",
+                        newCategory.icon === option.name 
+                          ? "bg-accent text-white shadow-lg shadow-accent/20" 
+                          : "text-slate-400 hover:text-slate-900 hover:bg-white"
+                      )}
+                    >
+                      <option.icon size={20} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex gap-4 pt-4">
+                <button 
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="btn-secondary flex-1"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit"
+                  disabled={isLoading}
+                  className="btn-primary flex-1 flex items-center justify-center gap-2"
+                >
+                  {isLoading ? <Loader2 className="animate-spin" size={18} /> : (editingCategory ? 'Salvar Alterações' : 'Criar Categoria')}
+                </button>
+              </div>
             </form>
           </div>
         </div>
       )}
 
-      <ConfirmModal
-        isOpen={confirmDelete.isOpen}
-        onClose={() => setConfirmDelete({ isOpen: false, id: null })}
-        onConfirm={() => confirmDelete.id && handleDelete(confirmDelete.id)}
+      <ConfirmModal 
+        isOpen={isConfirmOpen}
+        onClose={() => setIsConfirmOpen(false)}
+        onConfirm={handleDelete}
         title="Excluir Categoria"
-        message="Tem certeza que deseja excluir esta categoria? Esta ação não poderá ser desfeita."
+        message="Tem certeza que deseja excluir esta categoria? Isso não afetará os registros existentes, mas eles ficarão sem categoria."
       />
     </div>
   );

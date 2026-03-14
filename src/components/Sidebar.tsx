@@ -27,7 +27,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, setActiveSection, onLo
   const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
-    // Set initial state based on screen size
     if (window.innerWidth >= 1024) {
       setIsOpen(true);
     }
@@ -47,7 +46,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, setActiveSection, onLo
     { id: 'profile', icon: User, label: 'Perfil' },
   ];
 
-  // Close sidebar on mobile when a section is selected
   const handleSectionSelect = (id: string) => {
     setActiveSection(id);
     if (window.innerWidth < 1024) {
@@ -61,70 +59,69 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, setActiveSection, onLo
 
   return (
     <>
-      {/* Overlay for mobile */}
       {isOpen && (
         <div 
-          className="lg:hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+          className="lg:hidden fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-40"
           onClick={() => setIsOpen(false)}
         />
       )}
 
       <aside className={cn(
-        "fixed left-0 top-0 h-screen bg-brand-dark text-white transition-all duration-300 z-50 flex flex-col shadow-2xl lg:shadow-none",
-        isOpen ? "translate-x-0 w-64" : "-translate-x-full lg:translate-x-0 lg:w-20"
+        "fixed left-0 top-0 h-screen bg-white transition-all duration-500 z-50 flex flex-col border-r border-slate-100 shadow-xl shadow-slate-200/20",
+        isOpen ? "translate-x-0 w-72" : "-translate-x-full lg:translate-x-0 lg:w-24"
       )}>
-        <div className="p-6 flex items-center gap-3 border-b border-white/10">
-          <div className="w-10 h-10 bg-brand-gold rounded-xl flex items-center justify-center text-brand-dark shrink-0">
-            <BarChart3 size={24} />
+        <div className="p-8 flex items-center gap-3">
+          <div className="w-10 h-10 bg-accent rounded-xl flex items-center justify-center text-white shadow-lg shadow-accent/20">
+            <BarChart3 size={20} />
           </div>
           {isOpen && (
-            <span className="font-bold text-xl tracking-tight animate-in fade-in duration-500">EagleFinance</span>
+            <span className="font-bold text-xl text-slate-900 tracking-tight animate-in fade-in slide-in-from-left-2">
+              Eagle<span className="text-accent">Finance</span>
+            </span>
           )}
         </div>
 
-        <nav className="flex-1 px-4 mt-6 space-y-2 overflow-y-auto custom-scrollbar">
+        <nav className="flex-1 px-4 mt-10 space-y-2 overflow-y-auto custom-scrollbar">
           {menuItems.map((item) => (
             <button
               key={item.id}
               onClick={() => handleSectionSelect(item.id)}
               className={cn(
-                "w-full flex items-center gap-4 p-3 rounded-xl transition-all group relative",
+                "w-full flex items-center gap-4 p-4 rounded-xl transition-all duration-300 group relative",
                 activeSection === item.id 
-                  ? "bg-brand-gold text-brand-dark font-bold shadow-lg shadow-brand-gold/20" 
-                  : "hover:bg-white/10 text-gray-400 hover:text-white"
+                  ? "bg-accent-soft text-accent" 
+                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
               )}
             >
-              <item.icon size={20} className={cn("shrink-0", activeSection === item.id ? "scale-110" : "group-hover:scale-110 transition-transform")} />
+              <item.icon size={20} strokeWidth={activeSection === item.id ? 2.5 : 2} className="shrink-0" />
               {isOpen && (
-                <span className="font-medium animate-in slide-in-from-left-2 duration-300">
+                <span className="text-sm font-semibold animate-in fade-in slide-in-from-left-2">
                   {item.label}
                 </span>
               )}
-              {!isOpen && (
-                <div className="absolute left-full ml-4 px-2 py-1 bg-brand-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
-                  {item.label}
-                </div>
+              {activeSection === item.id && !isOpen && (
+                <div className="absolute right-0 w-1 h-6 bg-accent rounded-l-full" />
               )}
             </button>
           ))}
         </nav>
 
-        <div className="p-4 mt-auto space-y-4 border-t border-white/10">
+        <div className="p-6 mt-auto border-t border-slate-50">
           <div className={cn(
-            "px-4 py-3 bg-white/5 rounded-2xl flex items-center gap-3 transition-all",
-            !isOpen && "justify-center p-2"
+            "flex items-center gap-4 p-3 rounded-2xl bg-slate-50 transition-all",
+            !isOpen && "justify-center bg-transparent"
           )}>
             {user.photoURL ? (
-              <img src={user.photoURL} alt={user.displayName || ''} className="w-10 h-10 rounded-xl border border-white/10 object-cover shrink-0" />
+              <img src={user.photoURL} alt={user.displayName || ''} className="w-10 h-10 rounded-xl shadow-sm object-cover shrink-0" />
             ) : (
-              <div className="w-10 h-10 rounded-xl bg-brand-gold flex items-center justify-center text-brand-dark font-bold shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-accent/10 text-accent flex items-center justify-center text-sm font-bold shrink-0">
                 {userInitials}
               </div>
             )}
             {isOpen && (
               <div className="flex-1 min-w-0 animate-in fade-in duration-500">
-                <p className="text-sm font-bold truncate">{user.displayName || 'Usuário'}</p>
-                <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                <p className="text-sm font-bold text-slate-900 truncate">{user.displayName || 'Usuário'}</p>
+                <p className="text-[10px] font-medium text-slate-400 truncate">{user.email}</p>
               </div>
             )}
           </div>
@@ -132,12 +129,12 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, setActiveSection, onLo
           <button
             onClick={onLogout}
             className={cn(
-              "w-full flex items-center gap-4 p-3 rounded-xl text-gray-400 hover:text-red-400 hover:bg-red-400/10 transition-all group",
+              "w-full flex items-center gap-4 p-4 mt-4 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all group",
               !isOpen && "justify-center"
             )}
           >
-            <LogOut size={20} className="group-hover:scale-110 transition-transform" />
-            {isOpen && <span className="font-medium">Sair</span>}
+            <LogOut size={20} strokeWidth={2} />
+            {isOpen && <span className="text-sm font-semibold">Sair da Conta</span>}
           </button>
         </div>
       </aside>

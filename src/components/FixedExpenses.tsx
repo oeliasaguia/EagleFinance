@@ -1,19 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, CheckCircle2, Clock, Trash2, Edit2, Loader2, X } from 'lucide-react';
+import { 
+  Plus, Trash2, Edit2, Loader2, X, Calendar, 
+  Clock, AlertCircle, CheckCircle2, Search
+} from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 import { formatCurrency, cn } from '../lib/utils';
-import { FixedExpense } from '../types';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firebase-errors';
 import { useToast } from './Toast';
-
 import { User as FirebaseUser } from 'firebase/auth';
 
-interface Category {
-  id: string;
-  name: string;
-  type: 'income' | 'expense';
+interface FixedExpense {
+  id?: string;
+  uid: string;
+  description: string;
+  amount: number;
+  dueDate: number;
+  category: string;
+  status: 'pending' | 'paid';
 }
 
 interface FixedExpensesProps {
@@ -21,323 +26,345 @@ interface FixedExpensesProps {
 }
 
 const FixedExpenses: React.FC<FixedExpensesProps> = ({ user }) => {
-  const { showToast } = useToast();
   const [expenses, setExpenses] = useState<FixedExpense[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [categories, setCategories] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [editingExpense, setEditingExpense] = useState<FixedExpense | null>(null);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [expenseToDelete, setExpenseToDelete] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const { showToast } = useToast();
+
   const [formData, setFormData] = useState({
-    name: '',
+    description: '',
     amount: '',
+    dueDate: '1',
     category: '',
-    dueDay: '1'
-  });
-  const [confirmDelete, setConfirmDelete] = useState<{ isOpen: boolean; id: string | null }>({
-    isOpen: false,
-    id: null
+    status: 'pending' as 'pending' | 'paid'
   });
 
   useEffect(() => {
-    if (!user) return;
-
     const q = query(
-      collection(db, 'fixedExpenses'),
+      collection(db, 'fixed_expenses'),
       where('uid', '==', user.uid)
     );
 
-    const unsubscribeExpenses = onSnapshot(q, (snapshot) => {
+    const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as FixedExpense[];
-      
-      setExpenses(data.sort((a, b) => a.dueDay - b.dueDay));
-      setLoading(false);
+      setExpenses(data);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'fixedExpenses');
+      handleFirestoreError(error, OperationType.LIST, 'fixed_expenses');
     });
 
-    const catQ = query(
+    return () => unsubscribe();
+  }, [user.uid]);
+
+  useEffect(() => {
+    const q = query(
       collection(db, 'categories'),
       where('uid', '==', user.uid),
       where('type', '==', 'expense')
     );
 
-    const unsubscribeCategories = onSnapshot(catQ, (snapshot) => {
+    const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
-      })) as Category[];
-      setCategories(data.sort((a, b) => a.name.localeCompare(b.name)));
+      }));
+      setCategories(data);
     });
 
-    return () => {
-      unsubscribeExpenses();
-      unsubscribeCategories();
-    };
-  }, [user]);
+    return () => unsubscribe();
+  }, [user.uid]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
-
-    const amount = parseFloat(formData.amount);
-    if (isNaN(amount) || amount <= 0) {
-      alert('Por favor, insira um valor válido maior que zero.');
-      return;
-    }
-
-    if (!formData.category) {
-      alert('Por favor, selecione ou insira uma categoria.');
-      return;
-    }
+    setIsLoading(true);
 
     try {
-      const payload = {
+      const data = {
+        ...formData,
+        amount: parseFloat(formData.amount),
+        dueDate: parseInt(formData.dueDate),
         uid: user.uid,
-        name: formData.name,
-        amount: amount,
-        category: formData.category,
-        dueDay: parseInt(formData.dueDay),
         updatedAt: serverTimestamp()
       };
 
-      if (editingExpense?.id) {
-        await updateDoc(doc(db, 'fixedExpenses', editingExpense.id), payload);
-        showToast('Despesa atualizada com sucesso!');
+      if (editingExpense) {
+        await updateDoc(doc(db, 'fixed_expenses', editingExpense.id!), data);
+        showToast('Despesa fixa atualizada!', 'success');
       } else {
-        await addDoc(collection(db, 'fixedExpenses'), {
-          ...payload,
-          status: 'pending',
+        await addDoc(collection(db, 'fixed_expenses'), {
+          ...data,
           createdAt: serverTimestamp()
         });
-        showToast('Despesa cadastrada com sucesso!');
+        showToast('Despesa fixa adicionada!', 'success');
       }
 
       setIsModalOpen(false);
+      setFormData({ description: '', amount: '', dueDate: '1', category: '', status: 'pending' });
       setEditingExpense(null);
-      setFormData({
-        name: '',
-        amount: '',
-        category: '',
-        dueDay: '1'
-      });
     } catch (error) {
-      handleFirestoreError(error, editingExpense ? OperationType.UPDATE : OperationType.CREATE, 'fixedExpenses');
+      handleFirestoreError(error, editingExpense ? OperationType.UPDATE : OperationType.CREATE, 'fixed_expenses');
+      showToast('Erro ao salvar despesa fixa.', 'error');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const toggleStatus = async (id: string, currentStatus: string) => {
+  const toggleStatus = async (expense: FixedExpense) => {
     try {
-      await updateDoc(doc(db, 'fixedExpenses', id), {
-        status: currentStatus === 'paid' ? 'pending' : 'paid'
+      const newStatus = expense.status === 'paid' ? 'pending' : 'paid';
+      await updateDoc(doc(db, 'fixed_expenses', expense.id!), {
+        status: newStatus,
+        updatedAt: serverTimestamp()
       });
-      showToast(`Despesa marcada como ${currentStatus === 'paid' ? 'pendente' : 'paga'}!`);
+      showToast(`Status alterado para ${newStatus === 'paid' ? 'pago' : 'pendente'}`, 'success');
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, 'fixedExpenses');
+      showToast('Erro ao alterar status.', 'error');
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async () => {
+    if (!expenseToDelete) return;
+
     try {
-      await deleteDoc(doc(db, 'fixedExpenses', id));
-      showToast('Despesa excluída com sucesso!');
+      await deleteDoc(doc(db, 'fixed_expenses', expenseToDelete));
+      showToast('Despesa fixa excluída!', 'success');
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, 'fixedExpenses');
+      handleFirestoreError(error, OperationType.DELETE, 'fixed_expenses');
+      showToast('Erro ao excluir despesa fixa.', 'error');
+    } finally {
+      setIsConfirmOpen(false);
+      setExpenseToDelete(null);
     }
   };
 
   const openEdit = (expense: FixedExpense) => {
     setEditingExpense(expense);
     setFormData({
-      name: expense.name,
+      description: expense.description,
       amount: expense.amount.toString(),
+      dueDate: expense.dueDate.toString(),
       category: expense.category,
-      dueDay: expense.dueDay.toString()
+      status: expense.status
     });
     setIsModalOpen(true);
   };
 
+  const filteredExpenses = expenses.filter(e => 
+    e.description.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-          <h1 className="text-3xl font-bold text-brand-dark">Despesas Fixas</h1>
-          <p className="text-gray-500">Acompanhe seus compromissos recorrentes.</p>
+          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Despesas Fixas</h1>
+          <p className="text-slate-500 mt-1 font-medium">Controle seus compromissos mensais recorrentes.</p>
         </div>
         <button 
           onClick={() => {
             setEditingExpense(null);
-            setFormData({
-              name: '',
-              amount: '',
-              category: categories[0]?.name || '',
-              dueDay: '1'
-            });
+            setFormData({ description: '', amount: '', dueDate: '1', category: '', status: 'pending' });
             setIsModalOpen(true);
           }}
-          className="btn-primary flex items-center gap-2 self-start"
+          className="btn-primary flex items-center gap-2"
         >
-          <Plus size={20} />
+          <Plus size={18} />
           Nova Despesa Fixa
         </button>
-      </header>
+      </div>
 
-      {loading ? (
-        <div className="p-12 flex justify-center">
-          <Loader2 className="animate-spin text-brand-gold" size={32} />
+      <div className="modern-card">
+        <div className="relative mb-8">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <input 
+            type="text" 
+            placeholder="Pesquisar por descrição..." 
+            className="input-field pl-12"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
         </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {expenses.length === 0 ? (
-            <div className="col-span-full p-12 text-center text-gray-400 glass-card">
-              Nenhuma despesa fixa cadastrada.
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-slate-50">
+                <th className="pb-4 stat-label">Vencimento</th>
+                <th className="pb-4 stat-label">Descrição</th>
+                <th className="pb-4 stat-label">Categoria</th>
+                <th className="pb-4 stat-label text-right">Valor</th>
+                <th className="pb-4 stat-label text-center">Status</th>
+                <th className="pb-4 stat-label text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {filteredExpenses.map((e) => (
+                <tr key={e.id} className="group hover:bg-slate-50/50 transition-all">
+                  <td className="py-5">
+                    <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                      <Calendar size={14} className="text-slate-400" />
+                      Dia {e.dueDate}
+                    </div>
+                  </td>
+                  <td className="py-5">
+                    <span className="text-sm font-bold text-slate-900">{e.description}</span>
+                  </td>
+                  <td className="py-5">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 uppercase tracking-wider">
+                      {e.category}
+                    </span>
+                  </td>
+                  <td className="py-5 text-sm font-bold text-right text-rose-600">
+                    {formatCurrency(e.amount)}
+                  </td>
+                  <td className="py-5 text-center">
+                    <button 
+                      onClick={() => toggleStatus(e)}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all",
+                        e.status === 'paid' 
+                          ? "bg-emerald-50 text-emerald-600" 
+                          : "bg-amber-50 text-amber-600"
+                      )}
+                    >
+                      {e.status === 'paid' ? <CheckCircle2 size={12} /> : <Clock size={12} />}
+                      {e.status === 'paid' ? 'Pago' : 'Pendente'}
+                    </button>
+                  </td>
+                  <td className="py-5 text-right">
+                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                      <button 
+                        onClick={() => openEdit(e)}
+                        className="p-2 text-slate-400 hover:text-accent hover:bg-accent-soft rounded-lg transition-all"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                      <button 
+                        onClick={() => {
+                          setExpenseToDelete(e.id!);
+                          setIsConfirmOpen(true);
+                        }}
+                        className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {filteredExpenses.length === 0 && (
+            <div className="text-center py-20">
+              <AlertCircle className="mx-auto text-slate-300 mb-4" size={48} />
+              <p className="text-slate-400 font-medium">Nenhuma despesa fixa encontrada.</p>
             </div>
-          ) : (
-            expenses.map((expense) => (
-              <div key={expense.id} className="glass-card p-6 flex flex-col gap-4 relative group">
-                <div className="flex justify-between items-start">
-                  <div className={cn(
-                    "p-3 rounded-xl",
-                    expense.status === 'paid' ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"
-                  )}>
-                    {expense.status === 'paid' ? <CheckCircle2 size={24} /> : <Clock size={24} />}
-                  </div>
-                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                    <button 
-                      onClick={() => openEdit(expense)}
-                      className="p-2 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-brand-dark"
-                    >
-                      <Edit2 size={16} />
-                    </button>
-                    <button 
-                      onClick={() => expense.id && setConfirmDelete({ isOpen: true, id: expense.id })}
-                      className="p-2 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-red-500"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="font-bold text-lg text-brand-dark">{expense.name}</h3>
-                  <p className="text-sm text-gray-500">{expense.category} • Vence dia {expense.dueDay}</p>
-                </div>
-
-                <div className="flex items-center justify-between mt-2">
-                  <span className="text-xl font-bold text-brand-dark">{formatCurrency(expense.amount)}</span>
-                  <button 
-                    onClick={() => expense.id && toggleStatus(expense.id, expense.status)}
-                    className={cn(
-                      "px-4 py-1.5 rounded-lg text-sm font-semibold transition-all",
-                      expense.status === 'paid' 
-                        ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200" 
-                        : "bg-brand-dark text-white hover:bg-brand-dark/90"
-                    )}
-                  >
-                    {expense.status === 'paid' ? 'Pago' : 'Marcar como Pago'}
-                  </button>
-                </div>
-              </div>
-            ))
           )}
         </div>
-      )}
+      </div>
 
       {/* Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-brand-dark/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="glass-card bg-white w-full max-w-md p-8 space-y-6 animate-in zoom-in-95 duration-300">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-brand-dark">
-                {editingExpense ? 'Editar' : 'Nova'} Despesa Fixa
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-6 z-50 animate-in fade-in duration-300">
+          <div className="modern-card w-full max-w-lg animate-in zoom-in-95 duration-300">
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-xl font-bold text-slate-900">
+                {editingExpense ? 'Editar Despesa Fixa' : 'Nova Despesa Fixa'}
               </h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-brand-dark transition-all">
-                <X size={24} />
+              <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-all">
+                <X size={20} className="text-slate-400" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-6">
               <div className="space-y-2">
-                <label className="text-sm font-bold text-gray-600">Nome da Despesa</label>
+                <label className="stat-label">Descrição</label>
                 <input 
                   type="text" 
                   required
-                  placeholder="Ex: Aluguel, Internet..."
+                  placeholder="Ex: Aluguel, Internet, Netflix..."
                   className="input-field"
-                  value={formData.name}
-                  onChange={e => setFormData({...formData, name: e.target.value})}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-gray-600">Valor Mensal</label>
-                <input 
-                  type="number" 
-                  step="0.01"
-                  required
-                  placeholder="0,00"
-                  className="input-field"
-                  value={formData.amount}
-                  onChange={e => setFormData({...formData, amount: e.target.value})}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-gray-600">Categoria</label>
-                <div className="relative">
-                  <input 
-                    list="fixed-category-suggestions"
-                    className="input-field"
-                    placeholder="Selecione ou digite uma categoria"
-                    value={formData.category}
-                    onChange={e => setFormData({...formData, category: e.target.value})}
-                    required
-                  />
-                  <datalist id="fixed-category-suggestions">
-                    {categories.length > 0 ? (
-                      categories.map(cat => (
-                        <option key={cat.id} value={cat.name} />
-                      ))
-                    ) : (
-                      ['Alimentação', 'Transporte', 'Lazer', 'Saúde', 'Educação', 'Moradia', 'Assinaturas', 'Outros'].map(cat => (
-                        <option key={cat} value={cat} />
-                      ))
-                    )}
-                  </datalist>
-                </div>
-                {categories.length === 0 && (
-                  <p className="text-xs text-brand-gold">
-                    Dica: Você pode cadastrar categorias personalizadas na seção "Categorias".
-                  </p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-gray-600">Dia do Vencimento</label>
-                <input 
-                  type="number" 
-                  min="1"
-                  max="31"
-                  required
-                  className="input-field"
-                  value={formData.dueDay}
-                  onChange={e => setFormData({...formData, dueDay: e.target.value})}
+                  value={formData.description}
+                  onChange={e => setFormData({...formData, description: e.target.value})}
                 />
               </div>
 
-              <button type="submit" className="w-full btn-gold py-4 font-bold text-lg shadow-xl mt-4">
-                {editingExpense ? 'Salvar Alterações' : 'Salvar Despesa Fixa'}
-              </button>
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="stat-label">Valor Mensal</label>
+                  <input 
+                    type="number" 
+                    step="0.01"
+                    required
+                    placeholder="0,00"
+                    className="input-field"
+                    value={formData.amount}
+                    onChange={e => setFormData({...formData, amount: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="stat-label">Dia do Vencimento</label>
+                  <select 
+                    className="input-field"
+                    value={formData.dueDate}
+                    onChange={e => setFormData({...formData, dueDate: e.target.value})}
+                  >
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
+                      <option key={day} value={day}>Dia {day}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="stat-label">Categoria</label>
+                <select 
+                  required
+                  className="input-field"
+                  value={formData.category}
+                  onChange={e => setFormData({...formData, category: e.target.value})}
+                >
+                  <option value="">Selecione uma categoria</option>
+                  {categories.map(cat => (
+                    <option key={cat.id} value={cat.name}>{cat.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex gap-4 pt-4">
+                <button 
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="btn-secondary flex-1"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit"
+                  disabled={isLoading}
+                  className="btn-primary flex-1 flex items-center justify-center gap-2"
+                >
+                  {isLoading ? <Loader2 className="animate-spin" size={18} /> : (editingExpense ? 'Salvar Alterações' : 'Confirmar Despesa')}
+                </button>
+              </div>
             </form>
           </div>
         </div>
       )}
 
-      <ConfirmModal
-        isOpen={confirmDelete.isOpen}
-        onClose={() => setConfirmDelete({ isOpen: false, id: null })}
-        onConfirm={() => confirmDelete.id && handleDelete(confirmDelete.id)}
+      <ConfirmModal 
+        isOpen={isConfirmOpen}
+        onClose={() => setIsConfirmOpen(false)}
+        onConfirm={handleDelete}
         title="Excluir Despesa Fixa"
-        message="Tem certeza que deseja excluir esta despesa fixa? Esta ação não poderá ser desfeita."
+        message="Tem certeza que deseja excluir esta despesa fixa? Esta ação não pode ser desfeita."
       />
     </div>
   );

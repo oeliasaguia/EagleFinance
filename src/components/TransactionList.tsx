@@ -1,18 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Filter, Edit2, Trash2, Loader2, X, Tag } from 'lucide-react';
-import ConfirmModal from './ConfirmModal';
-import { formatCurrency, cn } from '../lib/utils';
-import { Transaction } from '../types';
+import { 
+  Plus, 
+  Search, 
+  Filter, 
+  Edit2, 
+  Trash2, 
+  Loader2, 
+  X,
+  TrendingUp,
+  TrendingDown
+} from 'lucide-react';
 import { db } from '../firebase';
-import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, updateDoc, orderBy, serverTimestamp } from 'firebase/firestore';
+import { formatCurrency, cn } from '../lib/utils';
+import ConfirmModal from './ConfirmModal';
 import { handleFirestoreError, OperationType } from '../lib/firebase-errors';
 import { useToast } from './Toast';
-
 import { User as FirebaseUser } from 'firebase/auth';
 
-interface Category {
+interface Transaction {
   id: string;
-  name: string;
+  description: string;
+  amount: number;
+  category: string;
+  date: Date;
   type: 'income' | 'expense';
 }
 
@@ -22,157 +33,145 @@ interface TransactionListProps {
 }
 
 const TransactionList: React.FC<TransactionListProps> = ({ type, user }) => {
-  const { showToast } = useToast();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterCategory, setFilterCategory] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
+  const { showToast } = useToast();
+
   const [formData, setFormData] = useState({
     description: '',
     amount: '',
     category: '',
-    date: new Date().toISOString().split('T')[0]
-  });
-  const [confirmDelete, setConfirmDelete] = useState<{ isOpen: boolean; id: string | null }>({
-    isOpen: false,
-    id: null
+    date: new Date().toISOString().split('T')[0],
+    type: type
   });
 
   useEffect(() => {
-    if (!user) return;
-
-    // Fetch Transactions
     const q = query(
       collection(db, 'transactions'),
       where('uid', '==', user.uid),
-      where('type', '==', type)
+      where('type', '==', type),
+      orderBy('date', 'desc')
     );
 
-    const unsubscribeTransactions = onSnapshot(q, (snapshot) => {
+    const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({
         id: doc.id,
-        ...doc.data()
+        ...doc.data(),
+        date: doc.data().date?.toDate() || new Date()
       })) as Transaction[];
-      
-      setTransactions(data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-      setLoading(false);
+      setTransactions(data);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'transactions');
     });
 
-    // Fetch Categories
-    const catQ = query(
+    return () => unsubscribe();
+  }, [user.uid, type]);
+
+  useEffect(() => {
+    const q = query(
       collection(db, 'categories'),
       where('uid', '==', user.uid),
       where('type', '==', type)
     );
 
-    const unsubscribeCategories = onSnapshot(catQ, (snapshot) => {
+    const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
-      })) as Category[];
-      setCategories(data.sort((a, b) => a.name.localeCompare(b.name)));
+      }));
+      setCategories(data);
     });
 
-    return () => {
-      unsubscribeTransactions();
-      unsubscribeCategories();
-    };
-  }, [user, type]);
+    return () => unsubscribe();
+  }, [user.uid, type]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
-
-    const amount = parseFloat(formData.amount);
-    if (isNaN(amount) || amount <= 0) {
-      alert('Por favor, insira um valor válido maior que zero.');
-      return;
-    }
-
-    if (!formData.category) {
-      alert('Por favor, selecione ou insira uma categoria.');
-      return;
-    }
+    setIsLoading(true);
 
     try {
-      const payload = {
+      const data = {
+        ...formData,
+        amount: parseFloat(formData.amount),
+        date: new Date(formData.date),
         uid: user.uid,
-        description: formData.description,
-        amount: amount,
-        category: formData.category,
-        date: new Date(formData.date).toISOString(),
-        type,
         updatedAt: serverTimestamp()
       };
 
-      if (editingTransaction?.id) {
-        await updateDoc(doc(db, 'transactions', editingTransaction.id), payload);
-        showToast(`${type === 'income' ? 'Receita' : 'Despesa'} atualizada com sucesso!`);
+      if (editingTransaction) {
+        await updateDoc(doc(db, 'transactions', editingTransaction.id), data);
+        showToast('Registro atualizado com sucesso!', 'success');
       } else {
         await addDoc(collection(db, 'transactions'), {
-          ...payload,
+          ...data,
           createdAt: serverTimestamp()
         });
-        showToast(`${type === 'income' ? 'Receita' : 'Despesa'} registrada com sucesso!`);
+        showToast('Registro adicionado com sucesso!', 'success');
       }
 
       setIsModalOpen(false);
-      setEditingTransaction(null);
       setFormData({
         description: '',
         amount: '',
         category: '',
-        date: new Date().toISOString().split('T')[0]
+        date: new Date().toISOString().split('T')[0],
+        type: type
       });
     } catch (error) {
       handleFirestoreError(error, editingTransaction ? OperationType.UPDATE : OperationType.CREATE, 'transactions');
+      showToast('Erro ao salvar registro.', 'error');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async () => {
+    if (!transactionToDelete) return;
+
     try {
-      await deleteDoc(doc(db, 'transactions', id));
-      showToast(`${type === 'income' ? 'Receita' : 'Despesa'} excluída com sucesso!`);
+      await deleteDoc(doc(db, 'transactions', transactionToDelete));
+      showToast('Registro excluído com sucesso!', 'success');
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, 'transactions');
+      showToast('Erro ao excluir registro.', 'error');
+    } finally {
+      setIsConfirmOpen(false);
+      setTransactionToDelete(null);
     }
   };
 
-  const openEdit = (t: Transaction) => {
-    setEditingTransaction(t);
+  const openEdit = (transaction: Transaction) => {
+    setEditingTransaction(transaction);
     setFormData({
-      description: t.description,
-      amount: t.amount.toString(),
-      category: t.category,
-      date: new Date(t.date).toISOString().split('T')[0]
+      description: transaction.description,
+      amount: transaction.amount.toString(),
+      category: transaction.category,
+      date: transaction.date.toISOString().split('T')[0],
+      type: transaction.type
     });
     setIsModalOpen(true);
   };
 
-  const filteredTransactions = transactions.filter(t => {
-    const matchesSearch = t.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         t.category.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === 'all' || t.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
-
-  const defaultCategories = type === 'income' 
-    ? ['Salário', 'Investimentos', 'Presentes', 'Vendas', 'Outros']
-    : ['Alimentação', 'Transporte', 'Lazer', 'Saúde', 'Educação', 'Moradia', 'Assinaturas', 'Outros'];
+  const filteredTransactions = transactions.filter(t => 
+    t.description.toLowerCase().includes(searchTerm.toLowerCase()) &&
+    (filterCategory === '' || t.category === filterCategory)
+  );
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-          <h1 className="text-3xl font-bold text-brand-dark">
-            {type === 'income' ? 'Receitas' : 'Despesas'}
+          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
+            {type === 'income' ? 'Minhas Receitas' : 'Minhas Despesas'}
           </h1>
-          <p className="text-gray-500">Gerencie suas {type === 'income' ? 'entradas' : 'saídas'} financeiras.</p>
+          <p className="text-slate-500 mt-1 font-medium">Gerencie seus registros financeiros com facilidade.</p>
         </div>
         <button 
           onClick={() => {
@@ -180,248 +179,206 @@ const TransactionList: React.FC<TransactionListProps> = ({ type, user }) => {
             setFormData({
               description: '',
               amount: '',
-              category: categories[0]?.name || '',
-              date: new Date().toISOString().split('T')[0]
+              category: '',
+              date: new Date().toISOString().split('T')[0],
+              type: type
             });
             setIsModalOpen(true);
           }}
-          className="btn-primary flex items-center gap-2 self-start"
+          className="btn-primary flex items-center gap-2"
         >
-          <Plus size={20} />
-          Nova {type === 'income' ? 'Receita' : 'Despesa'}
+          <Plus size={18} />
+          Novo Registro
         </button>
-      </header>
-
-      <div className="glass-card p-4 flex flex-col md:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-          <input 
-            type="text" 
-            placeholder="Buscar por descrição ou categoria..." 
-            className="input-field pl-10"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-        
-        <select 
-          className="input-field md:w-64"
-          value={selectedCategory}
-          onChange={(e) => setSelectedCategory(e.target.value)}
-        >
-          <option value="all">Todas as Categorias</option>
-          {[...new Set(transactions.map(t => t.category))].sort().map(cat => (
-            <option key={cat} value={cat}>{cat}</option>
-          ))}
-        </select>
       </div>
 
-      <div className="glass-card overflow-hidden">
-        {loading ? (
-          <div className="p-12 flex justify-center">
-            <Loader2 className="animate-spin text-brand-gold" size={32} />
+      <div className="modern-card">
+        <div className="flex flex-col md:flex-row gap-4 mb-8">
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <input 
+              type="text" 
+              placeholder="Pesquisar por descrição..." 
+              className="input-field pl-12"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
           </div>
-        ) : (
-          <>
-            {/* Desktop View */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-bottom border-gray-100 bg-gray-50/50">
-                    <th className="p-4 font-semibold text-gray-600">Descrição</th>
-                    <th className="p-4 font-semibold text-gray-600">Categoria</th>
-                    <th className="p-4 font-semibold text-gray-600">Data</th>
-                    <th className="p-4 font-semibold text-gray-600">Valor</th>
-                    <th className="p-4 font-semibold text-gray-600 text-right">Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredTransactions.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="p-12 text-center text-gray-400">
-                        Nenhuma transação encontrada.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredTransactions.map((t) => (
-                      <tr key={t.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-all group">
-                        <td className="p-4 font-medium text-brand-dark">{t.description}</td>
-                        <td className="p-4">
-                          <span className="px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-xs font-medium">
-                            {t.category}
-                          </span>
-                        </td>
-                        <td className="p-4 text-gray-500 text-sm">
-                          {new Date(t.date).toLocaleDateString('pt-BR')}
-                        </td>
-                        <td className={cn(
-                          "p-4 font-bold",
-                          type === 'income' ? "text-emerald-600" : "text-rose-600"
-                        )}>
-                          {type === 'income' ? '+' : '-'} {formatCurrency(t.amount)}
-                        </td>
-                        <td className="p-4 text-right">
-                          <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                            <button 
-                              onClick={() => openEdit(t)}
-                              className="p-2 text-gray-400 hover:text-brand-dark hover:bg-white rounded-lg transition-all"
-                            >
-                              <Edit2 size={16} />
-                            </button>
-                            <button 
-                              onClick={() => t.id && setConfirmDelete({ isOpen: true, id: t.id })}
-                              className="p-2 text-gray-400 hover:text-red-500 hover:bg-white rounded-lg transition-all"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+          <div className="flex gap-4">
+            <div className="relative">
+              <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <select 
+                className="input-field pl-12 pr-10 appearance-none"
+                value={filterCategory}
+                onChange={(e) => setFilterCategory(e.target.value)}
+              >
+                <option value="">Todas Categorias</option>
+                {categories.map(cat => (
+                  <option key={cat.id} value={cat.name}>{cat.name}</option>
+                ))}
+              </select>
             </div>
+          </div>
+        </div>
 
-            {/* Mobile View */}
-            <div className="md:hidden divide-y divide-gray-100">
-              {filteredTransactions.length === 0 ? (
-                <div className="p-12 text-center text-gray-400">
-                  Nenhuma transação encontrada.
-                </div>
-              ) : (
-                filteredTransactions.map((t) => (
-                  <div key={t.id} className="p-4 space-y-3">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="font-bold text-brand-dark">{t.description}</h3>
-                        <p className="text-xs text-gray-400">{new Date(t.date).toLocaleDateString('pt-BR')}</p>
-                      </div>
-                      <div className={cn(
-                        "font-bold",
-                        type === 'income' ? "text-emerald-600" : "text-rose-600"
-                      )}>
-                        {type === 'income' ? '+' : '-'} {formatCurrency(t.amount)}
-                      </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-slate-50">
+                <th className="pb-4 stat-label">Data</th>
+                <th className="pb-4 stat-label">Descrição</th>
+                <th className="pb-4 stat-label">Categoria</th>
+                <th className="pb-4 stat-label text-right">Valor</th>
+                <th className="pb-4 stat-label text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {filteredTransactions.map((t) => (
+                <tr key={t.id} className="group hover:bg-slate-50/50 transition-all">
+                  <td className="py-5 text-sm text-slate-500 font-medium">
+                    {t.date.toLocaleDateString('pt-BR')}
+                  </td>
+                  <td className="py-5">
+                    <span className="text-sm font-bold text-slate-900">{t.description}</span>
+                  </td>
+                  <td className="py-5">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 uppercase tracking-wider">
+                      {t.category}
+                    </span>
+                  </td>
+                  <td className={cn(
+                    "py-5 text-sm font-bold text-right",
+                    t.type === 'income' ? "text-emerald-600" : "text-rose-600"
+                  )}>
+                    {t.type === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
+                  </td>
+                  <td className="py-5 text-right">
+                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                      <button 
+                        onClick={() => openEdit(t)}
+                        className="p-2 text-slate-400 hover:text-accent hover:bg-accent-soft rounded-lg transition-all"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                      <button 
+                        onClick={() => {
+                          setTransactionToDelete(t.id);
+                          setIsConfirmOpen(true);
+                        }}
+                        className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
+                      >
+                        <Trash2 size={16} />
+                      </button>
                     </div>
-                    <div className="flex justify-between items-center">
-                      <span className="px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-xs font-medium">
-                        {t.category}
-                      </span>
-                      <div className="flex gap-2">
-                        <button 
-                          onClick={() => openEdit(t)}
-                          className="p-2 text-gray-400 hover:text-brand-dark"
-                        >
-                          <Edit2 size={16} />
-                        </button>
-                        <button 
-                          onClick={() => t.id && setConfirmDelete({ isOpen: true, id: t.id })}
-                          className="p-2 text-gray-400 hover:text-red-500"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {filteredTransactions.length === 0 && (
+            <div className="text-center py-20">
+              <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Search className="text-slate-300" size={24} />
+              </div>
+              <p className="text-slate-400 text-sm font-medium">Nenhum registro encontrado.</p>
             </div>
-          </>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-brand-dark/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="glass-card bg-white w-full max-w-md p-8 space-y-6 animate-in zoom-in-95 duration-300">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-brand-dark">
-                {editingTransaction ? 'Editar' : 'Nova'} {type === 'income' ? 'Receita' : 'Despesa'}
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-6 z-50 animate-in fade-in duration-300">
+          <div className="modern-card w-full max-w-lg animate-in zoom-in-95 duration-300">
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-xl font-bold text-slate-900">
+                {editingTransaction ? 'Editar Registro' : 'Novo Registro'}
               </h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-brand-dark transition-all">
-                <X size={24} />
+              <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-all">
+                <X size={20} className="text-slate-400" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-6">
               <div className="space-y-2">
-                <label className="text-sm font-bold text-gray-600">Descrição</label>
+                <label className="stat-label">Descrição</label>
                 <input 
                   type="text" 
                   required
-                  placeholder="Ex: Salário, Supermercado..."
+                  placeholder="Ex: Supermercado, Salário..."
                   className="input-field"
                   value={formData.description}
                   onChange={e => setFormData({...formData, description: e.target.value})}
                 />
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-gray-600">Valor</label>
-                <input 
-                  type="number" 
-                  step="0.01"
-                  required
-                  placeholder="0,00"
-                  className="input-field"
-                  value={formData.amount}
-                  onChange={e => setFormData({...formData, amount: e.target.value})}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-gray-600">Categoria</label>
-                <div className="relative">
+
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="stat-label">Valor</label>
                   <input 
-                    list="category-suggestions"
-                    className="input-field"
-                    placeholder="Selecione ou digite uma categoria"
-                    value={formData.category}
-                    onChange={e => setFormData({...formData, category: e.target.value})}
+                    type="number" 
+                    step="0.01"
                     required
+                    placeholder="0,00"
+                    className="input-field"
+                    value={formData.amount}
+                    onChange={e => setFormData({...formData, amount: e.target.value})}
                   />
-                  <datalist id="category-suggestions">
-                    {categories.length > 0 ? (
-                      categories.map(cat => (
-                        <option key={cat.id} value={cat.name} />
-                      ))
-                    ) : (
-                      defaultCategories.map(cat => (
-                        <option key={cat} value={cat} />
-                      ))
-                    )}
-                  </datalist>
                 </div>
-                {categories.length === 0 && (
-                  <p className="text-xs text-brand-gold">
-                    Dica: Você pode cadastrar categorias personalizadas na seção "Categorias".
-                  </p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-gray-600">Data</label>
-                <input 
-                  type="date" 
-                  required
-                  className="input-field"
-                  value={formData.date}
-                  onChange={e => setFormData({...formData, date: e.target.value})}
-                />
+                <div className="space-y-2">
+                  <label className="stat-label">Data</label>
+                  <input 
+                    type="date" 
+                    required
+                    className="input-field"
+                    value={formData.date}
+                    onChange={e => setFormData({...formData, date: e.target.value})}
+                  />
+                </div>
               </div>
 
-              <button type="submit" className="w-full btn-gold py-4 font-bold text-lg shadow-xl mt-4">
-                {editingTransaction ? 'Salvar Alterações' : `Salvar ${type === 'income' ? 'Receita' : 'Despesa'}`}
-              </button>
+              <div className="space-y-2">
+                <label className="stat-label">Categoria</label>
+                <select 
+                  required
+                  className="input-field"
+                  value={formData.category}
+                  onChange={e => setFormData({...formData, category: e.target.value})}
+                >
+                  <option value="">Selecione uma categoria</option>
+                  {categories.map(cat => (
+                    <option key={cat.id} value={cat.name}>{cat.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex gap-4 pt-4">
+                <button 
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="btn-secondary flex-1"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit"
+                  disabled={isLoading}
+                  className="btn-primary flex-1 flex items-center justify-center gap-2"
+                >
+                  {isLoading ? <Loader2 className="animate-spin" size={18} /> : (editingTransaction ? 'Salvar Alterações' : 'Confirmar Registro')}
+                </button>
+              </div>
             </form>
           </div>
         </div>
       )}
 
-      <ConfirmModal
-        isOpen={confirmDelete.isOpen}
-        onClose={() => setConfirmDelete({ isOpen: false, id: null })}
-        onConfirm={() => confirmDelete.id && handleDelete(confirmDelete.id)}
-        title={`Excluir ${type === 'income' ? 'Receita' : 'Despesa'}`}
-        message={`Tem certeza que deseja excluir esta ${type === 'income' ? 'receita' : 'despesa'}? Esta ação não poderá ser desfeita.`}
+      <ConfirmModal 
+        isOpen={isConfirmOpen}
+        onClose={() => setIsConfirmOpen(false)}
+        onConfirm={handleDelete}
+        title="Excluir Registro"
+        message="Tem certeza que deseja excluir este registro? Esta ação não pode ser desfeita."
       />
     </div>
   );

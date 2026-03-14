@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
-import { CheckCircle2, X, AlertCircle } from 'lucide-react';
+import { CheckCircle2, X, AlertCircle, Info } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 type ToastType = 'success' | 'error' | 'info';
@@ -43,31 +43,31 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
-      <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none">
+      <div className="fixed bottom-6 right-6 z-[100] flex flex-col gap-3 pointer-events-none">
         {toasts.map((toast) => (
           <div
             key={toast.id}
             className={cn(
-              "pointer-events-auto flex items-center gap-3 p-4 rounded-2xl shadow-2xl border min-w-[300px] animate-in slide-in-from-right-full duration-300",
-              toast.type === 'success' ? "bg-white border-emerald-100 text-emerald-600" :
-              toast.type === 'error' ? "bg-white border-rose-100 text-rose-600" :
-              "bg-white border-blue-100 text-blue-600"
+              "pointer-events-auto flex items-center gap-4 p-4 rounded-2xl shadow-2xl bg-white border min-w-[320px] animate-in slide-in-from-right-full duration-500",
+              toast.type === 'success' ? "border-emerald-100" :
+              toast.type === 'error' ? "border-rose-100" :
+              "border-accent-soft"
             )}
           >
             <div className={cn(
-              "p-2 rounded-xl",
-              toast.type === 'success' ? "bg-emerald-50" :
-              toast.type === 'error' ? "bg-rose-50" :
-              "bg-blue-50"
+              "p-2.5 rounded-xl",
+              toast.type === 'success' ? "bg-emerald-50 text-emerald-600" :
+              toast.type === 'error' ? "bg-rose-50 text-rose-600" :
+              "bg-accent-soft text-accent"
             )}>
               {toast.type === 'success' ? <CheckCircle2 size={20} /> :
                toast.type === 'error' ? <AlertCircle size={20} /> :
-               <AlertCircle size={20} />}
+               <Info size={20} />}
             </div>
-            <p className="flex-1 font-bold text-sm">{toast.message}</p>
+            <p className="flex-1 font-bold text-sm text-slate-900">{toast.message}</p>
             <button 
               onClick={() => removeToast(toast.id)}
-              className="text-gray-400 hover:text-gray-600 transition-all"
+              className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-all"
             >
               <X size={18} />
             </button>

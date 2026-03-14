@@ -73,20 +73,22 @@ const Auth: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-brand-gray flex items-center justify-center p-6 overflow-hidden relative">
-      {/* Decorative elements */}
-      <div className="absolute top-0 right-0 w-96 h-96 bg-brand-gold/20 rounded-full -mr-20 -mt-20 blur-3xl animate-pulse" />
-      <div className="absolute bottom-0 left-0 w-96 h-96 bg-brand-gold/10 rounded-full -ml-20 -mb-20 blur-3xl animate-pulse delay-700" />
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 relative overflow-hidden">
+      {/* Decorative background elements */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+        <div className="absolute -top-24 -left-24 w-96 h-96 bg-accent/5 rounded-full blur-3xl" />
+        <div className="absolute top-1/2 -right-24 w-80 h-80 bg-emerald-500/5 rounded-full blur-3xl" />
+      </div>
 
       <div className="w-full max-w-md relative animate-in zoom-in-95 duration-700">
-        <div className="bg-white border border-gray-200 p-10 flex flex-col items-center text-center gap-8 rounded-3xl shadow-2xl">
-          <div className="w-20 h-20 bg-brand-gold rounded-3xl flex items-center justify-center text-brand-dark shadow-2xl shadow-brand-gold/20">
-            <BarChart3 size={40} />
+        <div className="modern-card p-10 flex flex-col items-center text-center gap-8">
+          <div className="w-16 h-16 bg-accent rounded-2xl flex items-center justify-center text-white shadow-xl shadow-accent/20">
+            <BarChart3 size={32} />
           </div>
 
           <div className="space-y-2">
-            <h1 className="text-4xl font-bold text-brand-dark tracking-tight">EagleFinance</h1>
-            <p className="text-gray-600">
+            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">EagleFinance</h1>
+            <p className="text-slate-500 font-medium">
               {isSignUp ? 'Crie sua conta e comece agora.' : 'Sua liberdade financeira começa aqui.'}
             </p>
           </div>
@@ -97,23 +99,23 @@ const Auth: React.FC = () => {
                 <button 
                   onClick={handleGoogleLogin}
                   disabled={isLoading}
-                  className="w-full flex items-center justify-center gap-3 bg-white border border-gray-200 text-brand-dark py-4 rounded-2xl font-bold hover:bg-gray-50 transition-all shadow-md disabled:opacity-50"
+                  className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 text-slate-700 py-4 rounded-xl font-bold hover:bg-slate-50 transition-all shadow-sm disabled:opacity-50 active:scale-95"
                 >
                   {isLoading ? <Loader2 className="animate-spin" size={20} /> : <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" />}
                   Entrar com Google
                 </button>
 
                 <div className="flex items-center gap-4 py-2">
-                  <div className="h-px bg-gray-200 flex-1" />
-                  <span className="text-xs text-gray-400 uppercase font-bold tracking-widest">Ou</span>
-                  <div className="h-px bg-gray-200 flex-1" />
+                  <div className="h-px bg-slate-100 flex-1" />
+                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Ou use seu e-mail</span>
+                  <div className="h-px bg-slate-100 flex-1" />
                 </div>
               </>
             )}
 
             <form onSubmit={handleEmailAuth} className="space-y-4">
               {error && (
-                <div className="bg-rose-50 border border-rose-200 text-rose-600 p-4 rounded-2xl text-sm flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
+                <div className="bg-rose-50 border border-rose-100 text-rose-600 p-4 rounded-xl text-xs font-bold flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
                   <AlertCircle size={18} className="shrink-0" />
                   <span className="text-left">{error}</span>
                 </div>
@@ -121,52 +123,52 @@ const Auth: React.FC = () => {
 
               {isSignUp && (
                 <div className="relative">
-                  <User className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                  <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                   <input 
                     type="text" 
                     placeholder="Nome completo" 
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-2xl py-4 pl-12 pr-4 text-brand-dark placeholder:text-gray-400 focus:outline-none focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/20 transition-all"
+                    className="input-field pl-12"
                   />
                 </div>
               )}
 
               <div className="relative">
-                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                 <input 
                   type="email" 
                   placeholder="E-mail" 
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-2xl py-4 pl-12 pr-4 text-brand-dark placeholder:text-gray-400 focus:outline-none focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/20 transition-all"
+                  className="input-field pl-12"
                 />
               </div>
 
               <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                 <input 
                   type="password" 
                   placeholder="Senha" 
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-2xl py-4 pl-12 pr-4 text-brand-dark placeholder:text-gray-400 focus:outline-none focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/20 transition-all"
+                  className="input-field pl-12"
                 />
               </div>
 
               <button 
                 type="submit"
                 disabled={isLoading}
-                className="w-full bg-brand-gold text-brand-dark py-4 rounded-2xl font-bold hover:bg-brand-gold/90 transition-all shadow-xl flex items-center justify-center gap-2 disabled:opacity-50"
+                className="btn-primary w-full flex items-center justify-center gap-2"
               >
                 {isLoading ? (
                   <Loader2 className="animate-spin" size={20} />
                 ) : (
                   <>
-                    {isSignUp ? 'Criar Conta' : 'Entrar'}
+                    {isSignUp ? 'Criar Conta' : 'Entrar na Conta'}
                     <ArrowRight size={18} />
                   </>
                 )}
@@ -174,14 +176,14 @@ const Auth: React.FC = () => {
             </form>
           </div>
 
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-slate-500 font-medium">
             {isSignUp ? 'Já tem uma conta?' : 'Não tem uma conta?'} 
             <button 
               onClick={() => {
                 setIsSignUp(!isSignUp);
                 setError(null);
               }}
-              className="text-brand-gold font-bold hover:underline cursor-pointer ml-1"
+              className="text-accent font-bold hover:underline cursor-pointer ml-1"
             >
               {isSignUp ? 'Entrar' : 'Cadastre-se'}
             </button>

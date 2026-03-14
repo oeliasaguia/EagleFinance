@@ -1,531 +1,359 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, CreditCard as CardIcon, Edit2, Loader2, X, Trash2, ShoppingBag } from 'lucide-react';
+import { 
+  Plus, CreditCard, Trash2, Edit2, Loader2, X, 
+  Wallet, Landmark, Smartphone, Banknote, Globe
+} from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 import { formatCurrency, cn } from '../lib/utils';
-import { CreditCard, CardPurchase } from '../types';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firebase-errors';
 import { useToast } from './Toast';
-
 import { User as FirebaseUser } from 'firebase/auth';
+
+const CARD_ICONS = [
+  { name: 'Wallet', icon: Wallet },
+  { name: 'Landmark', icon: Landmark },
+  { name: 'Smartphone', icon: Smartphone },
+  { name: 'Banknote', icon: Banknote },
+  { name: 'Globe', icon: Globe },
+  { name: 'CreditCard', icon: CreditCard },
+];
+
+const IconRenderer = ({ name, size = 24, className = "" }: { name: string, size?: number, className?: string }) => {
+  const IconComponent = CARD_ICONS.find(i => i.name === name)?.icon || CreditCard;
+  return <IconComponent size={size} className={className} />;
+};
+
+interface Card {
+  id?: string;
+  uid: string;
+  name: string;
+  bank: string;
+  limit: number;
+  currentBalance: number;
+  color: string;
+  icon?: string;
+}
 
 interface CardsProps {
   user: FirebaseUser;
 }
 
 const Cards: React.FC<CardsProps> = ({ user }) => {
-  const { showToast } = useToast();
-  const [cards, setCards] = useState<CreditCard[]>([]);
-  const [purchases, setPurchases] = useState<CardPurchase[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [cards, setCards] = useState<Card[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [editingCard, setEditingCard] = useState<CreditCard | null>(null);
-  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
-  const [formData, setFormData] = useState({
+  const [isLoading, setIsLoading] = useState(false);
+  const [editingCard, setEditingCard] = useState<Card | null>(null);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [cardToDelete, setCardToDelete] = useState<string | null>(null);
+  const { showToast } = useToast();
+
+  const [newCard, setNewCard] = useState<Omit<Card, 'uid'>>({
     name: '',
-    brand: 'Mastercard',
-    limit: '',
-    closingDay: '1',
-    dueDay: '1'
-  });
-  const [purchaseData, setPurchaseData] = useState({
-    description: '',
-    amount: '',
-    category: 'Outros',
-    date: new Date().toISOString().split('T')[0]
-  });
-  const [confirmDelete, setConfirmDelete] = useState<{ isOpen: boolean; id: string | null }>({
-    isOpen: false,
-    id: null
+    bank: '',
+    limit: 0,
+    currentBalance: 0,
+    color: '#6366f1',
+    icon: 'CreditCard'
   });
 
   useEffect(() => {
-    if (!user) return;
-
-    // Fetch Cards
     const q = query(
       collection(db, 'cards'),
       where('uid', '==', user.uid)
     );
 
-    const unsubscribeCards = onSnapshot(q, (snapshot) => {
+    const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
-      })) as CreditCard[];
-      
+      })) as Card[];
       setCards(data);
-      setLoading(false);
-      setError(null);
-    }, (err) => {
-      console.error('Error fetching cards:', err);
-      setError('Erro ao carregar cartões. Verifique suas permissões.');
-      setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'cards');
     });
 
-    // Fetch Purchases
-    const pq = query(
-      collection(db, 'cardPurchases'),
-      where('uid', '==', user.uid)
-    );
-
-    const unsubscribePurchases = onSnapshot(pq, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as CardPurchase[];
-      setPurchases(data);
-    }, (err) => {
-      console.error('Error fetching purchases:', err);
-    });
-
-    return () => {
-      unsubscribeCards();
-      unsubscribePurchases();
-    };
-  }, [user]);
+    return () => unsubscribe();
+  }, [user.uid]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    setIsLoading(true);
 
-    const limit = parseFloat(formData.limit);
-    if (isNaN(limit) || limit <= 0) {
-      alert('Por favor, insira um limite válido maior que zero.');
-      return;
-    }
-
-    setIsSubmitting(true);
     try {
-      const payload = {
+      const data = {
+        ...newCard,
+        limit: parseFloat(newCard.limit.toString()),
+        currentBalance: parseFloat(newCard.currentBalance.toString()),
         uid: user.uid,
-        name: formData.name,
-        brand: formData.brand,
-        limit: limit,
-        closingDay: parseInt(formData.closingDay),
-        dueDay: parseInt(formData.dueDay),
         updatedAt: serverTimestamp()
       };
 
-      if (editingCard?.id) {
-        await updateDoc(doc(db, 'cards', editingCard.id), payload);
-        showToast('Cartão atualizado com sucesso!');
+      if (editingCard) {
+        await updateDoc(doc(db, 'cards', editingCard.id!), data);
+        showToast('Cartão atualizado com sucesso!', 'success');
       } else {
         await addDoc(collection(db, 'cards'), {
-          ...payload,
+          ...data,
           createdAt: serverTimestamp()
         });
-        showToast('Cartão cadastrado com sucesso!');
+        showToast('Cartão adicionado com sucesso!', 'success');
       }
 
       setIsModalOpen(false);
+      setNewCard({ name: '', bank: '', limit: 0, currentBalance: 0, color: '#6366f1', icon: 'CreditCard' });
       setEditingCard(null);
-      setFormData({
-        name: '',
-        brand: 'Mastercard',
-        limit: '',
-        closingDay: '1',
-        dueDay: '1'
-      });
     } catch (error) {
       handleFirestoreError(error, editingCard ? OperationType.UPDATE : OperationType.CREATE, 'cards');
+      showToast('Erro ao salvar cartão.', 'error');
     } finally {
-      setIsSubmitting(false);
+      setIsLoading(false);
     }
   };
 
-  const handleAddPurchase = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user || !selectedCardId) return;
+  const handleDelete = async () => {
+    if (!cardToDelete) return;
 
-    const amount = parseFloat(purchaseData.amount);
-    if (isNaN(amount) || amount <= 0) {
-      alert('Por favor, insira um valor válido.');
-      return;
-    }
-
-    setIsSubmitting(true);
     try {
-      await addDoc(collection(db, 'cardPurchases'), {
-        uid: user.uid,
-        cardId: selectedCardId,
-        description: purchaseData.description,
-        amount: amount,
-        category: purchaseData.category,
-        date: new Date(purchaseData.date).toISOString(),
-        createdAt: serverTimestamp()
-      });
-
-      showToast('Compra registrada com sucesso!');
-      setIsPurchaseModalOpen(false);
-      setPurchaseData({
-        description: '',
-        amount: '',
-        category: 'Outros',
-        date: new Date().toISOString().split('T')[0]
-      });
-      setSelectedCardId(null);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'cardPurchases');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    setIsSubmitting(true);
-    try {
-      // Delete the card
-      await deleteDoc(doc(db, 'cards', id));
-      
-      // Delete all purchases associated with this card
-      const cardPurchasesRefs = purchases.filter(p => p.cardId === id);
-      const deletePromises = cardPurchasesRefs.map(p => 
-        p.id ? deleteDoc(doc(db, 'cardPurchases', p.id)) : Promise.resolve()
-      );
-      await Promise.all(deletePromises);
-      
-      showToast('Cartão excluído com sucesso!');
+      await deleteDoc(doc(db, 'cards', cardToDelete));
+      showToast('Cartão excluído com sucesso!', 'success');
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, 'cards');
+      showToast('Erro ao excluir cartão.', 'error');
     } finally {
-      setIsSubmitting(false);
+      setIsConfirmOpen(false);
+      setCardToDelete(null);
     }
   };
 
-  const openEdit = (card: CreditCard) => {
+  const openEdit = (card: Card) => {
     setEditingCard(card);
-    setFormData({
+    setNewCard({
       name: card.name,
-      brand: card.brand,
-      limit: card.limit.toString(),
-      closingDay: card.closingDay.toString(),
-      dueDay: card.dueDay.toString()
+      bank: card.bank,
+      limit: card.limit,
+      currentBalance: card.currentBalance,
+      color: card.color,
+      icon: card.icon || 'CreditCard'
     });
     setIsModalOpen(true);
   };
 
-  const calculateUsedLimit = (cardId: string) => {
-    return purchases
-      .filter(p => p.cardId === cardId)
-      .reduce((acc, p) => acc + p.amount, 0);
-  };
-
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-          <h1 className="text-3xl font-bold text-brand-dark">Meus Cartões</h1>
-          <p className="text-gray-500">Gerencie seus limites e faturas.</p>
+          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Meus Cartões</h1>
+          <p className="text-slate-500 mt-1 font-medium">Gerencie seus cartões de crédito e contas bancárias.</p>
         </div>
         <button 
           onClick={() => {
             setEditingCard(null);
-            setFormData({
-              name: '',
-              brand: 'Mastercard',
-              limit: '',
-              closingDay: '1',
-              dueDay: '1'
-            });
+            setNewCard({ name: '', bank: '', limit: 0, currentBalance: 0, color: '#6366f1', icon: 'CreditCard' });
             setIsModalOpen(true);
           }}
-          className="btn-primary flex items-center gap-2 self-start"
+          className="btn-primary flex items-center gap-2"
         >
-          <Plus size={20} />
+          <Plus size={18} />
           Novo Cartão
         </button>
-      </header>
+      </div>
 
-      {error && (
-        <div className="p-4 bg-rose-50 text-rose-600 rounded-2xl border border-rose-100 flex items-center gap-3 animate-in fade-in">
-          <X className="shrink-0" size={20} />
-          <p className="text-sm font-medium">{error}</p>
-        </div>
-      )}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {cards.length === 0 ? (
+          <div className="col-span-full py-20 text-center modern-card border-dashed">
+            <CreditCard className="mx-auto text-slate-300 mb-4" size={48} />
+            <p className="text-slate-400 font-medium">Nenhum cartão cadastrado.</p>
+          </div>
+        ) : (
+          cards.map((card) => (
+            <div 
+              key={card.id} 
+              className="relative overflow-hidden rounded-3xl p-8 text-white shadow-2xl transition-all hover:-translate-y-2 group"
+              style={{ 
+                background: `linear-gradient(135deg, ${card.color}, ${card.color}dd)`,
+                boxShadow: `0 20px 40px -15px ${card.color}66`
+              }}
+            >
+              {/* Decorative circles */}
+              <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-3xl" />
+              <div className="absolute -left-10 -bottom-10 w-40 h-40 bg-black/10 rounded-full blur-3xl" />
 
-      {loading ? (
-        <div className="p-12 flex justify-center">
-          <Loader2 className="animate-spin text-brand-gold" size={32} />
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {cards.length === 0 ? (
-            <div className="col-span-full p-12 text-center text-gray-400 glass-card">
-              Nenhum cartão cadastrado.
-            </div>
-          ) : (
-            cards.map((card) => {
-              const usedLimit = calculateUsedLimit(card.id!);
-              const percentage = Math.min((usedLimit / card.limit) * 100, 100);
+              <div className="relative z-10 flex flex-col h-full">
+                <div className="flex justify-between items-start mb-12">
+                  <div className="p-3 bg-white/20 backdrop-blur-md rounded-2xl">
+                    <IconRenderer name={card.icon || 'CreditCard'} size={28} />
+                  </div>
+                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                    <button 
+                      onClick={() => openEdit(card)}
+                      className="p-2 bg-white/20 backdrop-blur-md hover:bg-white/40 rounded-xl transition-all"
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                    <button 
+                      onClick={() => {
+                        setCardToDelete(card.id!);
+                        setIsConfirmOpen(true);
+                      }}
+                      className="p-2 bg-white/20 backdrop-blur-md hover:bg-rose-500/40 rounded-xl transition-all"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
 
-              return (
-                <div key={card.id} className="flex flex-col gap-6">
-                  {/* Card Visual */}
-                  <div className="relative h-56 w-full rounded-3xl bg-gradient-to-br from-brand-dark to-slate-800 p-8 text-white shadow-xl overflow-hidden group">
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-brand-gold/10 rounded-full -mr-20 -mt-20 blur-3xl group-hover:bg-brand-gold/20 transition-all duration-700" />
+                <div className="mt-auto">
+                  <p className="text-white/60 text-xs font-bold uppercase tracking-widest mb-1">{card.bank}</p>
+                  <h3 className="text-xl font-bold mb-6">{card.name}</h3>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-white/60 text-[10px] font-bold uppercase tracking-wider mb-1">Saldo Atual</p>
+                      <p className="text-2xl font-bold">{formatCurrency(card.currentBalance)}</p>
+                    </div>
                     
-                    <div className="relative h-full flex flex-col justify-between">
-                      <div className="flex justify-between items-start">
-                        <div className="flex items-center gap-3">
-                          <div className="w-12 h-8 bg-white/10 rounded-lg backdrop-blur-sm flex items-center justify-center">
-                            <CardIcon size={20} className="text-brand-gold" />
-                          </div>
-                          <span className="font-bold text-lg">{card.name}</span>
-                        </div>
-                        <div className="flex gap-2 transition-all">
-                          <button 
-                            onClick={() => openEdit(card)}
-                            className="p-2 hover:bg-white/10 rounded-full transition-all text-gray-400 hover:text-white"
-                          >
-                            <Edit2 size={18} />
-                          </button>
-                          <button 
-                            onClick={() => card.id && setConfirmDelete({ isOpen: true, id: card.id })}
-                            className="p-2 hover:bg-white/10 rounded-full transition-all text-gray-400 hover:text-red-500"
-                          >
-                            <Trash2 size={20} />
-                          </button>
-                        </div>
+                    <div className="flex justify-between items-end">
+                      <div>
+                        <p className="text-white/60 text-[10px] font-bold uppercase tracking-wider mb-1">Limite</p>
+                        <p className="text-sm font-bold">{formatCurrency(card.limit)}</p>
                       </div>
-
-                      <div className="space-y-1">
-                        <p className="text-xs text-gray-400 uppercase tracking-widest">Limite Disponível</p>
-                        <p className="text-2xl font-bold tracking-tight">{formatCurrency(card.limit - usedLimit)}</p>
-                      </div>
-
-                      <div className="flex justify-between items-end">
-                        <div className="text-sm">
-                          <p className="text-gray-400 text-xs uppercase">Vencimento</p>
-                          <p className="font-medium">Dia {card.dueDay}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-brand-gold font-bold italic">{card.brand}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Card Details */}
-                  <div className="glass-card p-6 space-y-6">
-                    <div className="flex justify-between items-center">
-                      <h4 className="font-bold text-brand-dark">Resumo da Fatura</h4>
-                      <button 
-                        onClick={() => {
-                          setSelectedCardId(card.id!);
-                          setIsPurchaseModalOpen(true);
-                        }}
-                        className="text-sm text-brand-gold font-bold hover:underline flex items-center gap-1"
-                      >
-                        <ShoppingBag size={14} />
-                        Nova Compra
-                      </button>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-500">Limite Utilizado</span>
-                        <span className="font-bold text-brand-dark">{formatCurrency(usedLimit)} / {formatCurrency(card.limit)}</span>
-                      </div>
-                      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div 
-                          className={cn(
-                            "h-full transition-all duration-1000",
-                            percentage > 90 ? "bg-rose-500" : percentage > 70 ? "bg-amber-500" : "bg-brand-gold"
-                          )}
-                          style={{ width: `${percentage}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="p-4 bg-gray-50 rounded-2xl">
-                        <p className="text-xs text-gray-500 uppercase mb-1">Fechamento</p>
-                        <p className="font-bold text-brand-dark">Dia {card.closingDay}</p>
-                      </div>
-                      <div className="p-4 bg-gray-50 rounded-2xl">
-                        <p className="text-xs text-gray-500 uppercase mb-1">Vencimento</p>
-                        <p className="font-bold text-brand-dark">Dia {card.dueDay}</p>
+                      <div className="w-12 h-8 bg-white/20 backdrop-blur-md rounded-lg flex items-center justify-center">
+                        <div className="w-6 h-4 bg-white/30 rounded-sm" />
                       </div>
                     </div>
                   </div>
                 </div>
-              );
-            })
-          )}
-        </div>
-      )}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
 
-      {/* Card Modal */}
+      {/* Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-brand-dark/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="glass-card bg-white w-full max-w-md p-8 space-y-6 animate-in zoom-in-95 duration-300">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-brand-dark">
-                {editingCard ? 'Editar' : 'Novo'} Cartão
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-6 z-50 animate-in fade-in duration-300">
+          <div className="modern-card w-full max-w-lg animate-in zoom-in-95 duration-300">
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-xl font-bold text-slate-900">
+                {editingCard ? 'Editar Cartão' : 'Novo Cartão'}
               </h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-brand-dark transition-all">
-                <X size={24} />
+              <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-all">
+                <X size={20} className="text-slate-400" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-gray-600">Nome do Cartão</label>
-                <input 
-                  type="text" 
-                  required
-                  placeholder="Ex: Nubank, Inter..."
-                  className="input-field"
-                  value={formData.name}
-                  onChange={e => setFormData({...formData, name: e.target.value})}
-                />
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="stat-label">Nome do Cartão</label>
+                  <input 
+                    type="text" 
+                    required
+                    placeholder="Ex: Nubank, Inter..."
+                    className="input-field"
+                    value={newCard.name}
+                    onChange={e => setNewCard({...newCard, name: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="stat-label">Banco</label>
+                  <input 
+                    type="text" 
+                    required
+                    placeholder="Ex: Itaú, Bradesco..."
+                    className="input-field"
+                    value={newCard.bank}
+                    onChange={e => setNewCard({...newCard, bank: e.target.value})}
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-gray-600">Bandeira</label>
-                <select 
-                  className="input-field"
-                  value={formData.brand}
-                  onChange={e => setFormData({...formData, brand: e.target.value})}
+
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="stat-label">Limite</label>
+                  <input 
+                    type="number" 
+                    required
+                    placeholder="0,00"
+                    className="input-field"
+                    value={newCard.limit}
+                    onChange={e => setNewCard({...newCard, limit: parseFloat(e.target.value)})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="stat-label">Saldo Atual</label>
+                  <input 
+                    type="number" 
+                    required
+                    placeholder="0,00"
+                    className="input-field"
+                    value={newCard.currentBalance}
+                    onChange={e => setNewCard({...newCard, currentBalance: parseFloat(e.target.value)})}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="stat-label">Cor do Cartão</label>
+                  <input 
+                    type="color" 
+                    className="w-full h-12 rounded-xl cursor-pointer bg-transparent border-none"
+                    value={newCard.color}
+                    onChange={e => setNewCard({...newCard, color: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="stat-label">Ícone</label>
+                  <div className="flex gap-2 p-2 bg-slate-50 rounded-xl overflow-x-auto custom-scrollbar">
+                    {CARD_ICONS.map((option) => (
+                      <button
+                        key={option.name}
+                        type="button"
+                        onClick={() => setNewCard({ ...newCard, icon: option.name })}
+                        className={cn(
+                          "p-2 flex-shrink-0 rounded-lg transition-all",
+                          newCard.icon === option.name 
+                            ? "bg-accent text-white shadow-lg" 
+                            : "text-slate-400 hover:text-slate-900 hover:bg-white"
+                        )}
+                      >
+                        <option.icon size={18} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-4 pt-4">
+                <button 
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="btn-secondary flex-1"
                 >
-                  <option value="Mastercard">Mastercard</option>
-                  <option value="Visa">Visa</option>
-                  <option value="Elo">Elo</option>
-                  <option value="American Express">American Express</option>
-                </select>
+                  Cancelar
+                </button>
+                <button 
+                  type="submit"
+                  disabled={isLoading}
+                  className="btn-primary flex-1 flex items-center justify-center gap-2"
+                >
+                  {isLoading ? <Loader2 className="animate-spin" size={18} /> : (editingCard ? 'Salvar Alterações' : 'Criar Cartão')}
+                </button>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-gray-600">Limite Total</label>
-                <input 
-                  type="number" 
-                  step="0.01"
-                  required
-                  placeholder="0,00"
-                  className="input-field"
-                  value={formData.limit}
-                  onChange={e => setFormData({...formData, limit: e.target.value})}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-gray-600">Dia Fechamento</label>
-                  <input 
-                    type="number" 
-                    min="1"
-                    max="31"
-                    required
-                    className="input-field"
-                    value={formData.closingDay}
-                    onChange={e => setFormData({...formData, closingDay: e.target.value})}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-gray-600">Dia Vencimento</label>
-                  <input 
-                    type="number" 
-                    min="1"
-                    max="31"
-                    required
-                    className="input-field"
-                    value={formData.dueDay}
-                    onChange={e => setFormData({...formData, dueDay: e.target.value})}
-                  />
-                </div>
-              </div>
-
-              <button 
-                type="submit" 
-                disabled={isSubmitting}
-                className="w-full btn-gold py-4 font-bold text-lg shadow-xl mt-4 flex items-center justify-center gap-2"
-              >
-                {isSubmitting && <Loader2 className="animate-spin" size={20} />}
-                {editingCard ? 'Salvar Alterações' : 'Salvar Cartão'}
-              </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* Purchase Modal */}
-      {isPurchaseModalOpen && (
-        <div className="fixed inset-0 bg-brand-dark/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="glass-card bg-white w-full max-w-md p-8 space-y-6 animate-in zoom-in-95 duration-300">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-brand-dark">Nova Compra no Cartão</h2>
-              <button onClick={() => setIsPurchaseModalOpen(false)} className="text-gray-400 hover:text-brand-dark transition-all">
-                <X size={24} />
-              </button>
-            </div>
-
-            <form onSubmit={handleAddPurchase} className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-gray-600">Descrição</label>
-                <input 
-                  type="text" 
-                  required
-                  placeholder="Ex: Supermercado, Amazon..."
-                  className="input-field"
-                  value={purchaseData.description}
-                  onChange={e => setPurchaseData({...purchaseData, description: e.target.value})}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-gray-600">Valor</label>
-                <input 
-                  type="number" 
-                  step="0.01"
-                  required
-                  placeholder="0,00"
-                  className="input-field"
-                  value={purchaseData.amount}
-                  onChange={e => setPurchaseData({...purchaseData, amount: e.target.value})}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-gray-600">Categoria</label>
-                <input 
-                  type="text" 
-                  required
-                  placeholder="Ex: Lazer, Alimentação..."
-                  className="input-field"
-                  value={purchaseData.category}
-                  onChange={e => setPurchaseData({...purchaseData, category: e.target.value})}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-gray-600">Data</label>
-                <input 
-                  type="date" 
-                  required
-                  className="input-field"
-                  value={purchaseData.date}
-                  onChange={e => setPurchaseData({...purchaseData, date: e.target.value})}
-                />
-              </div>
-
-              <button 
-                type="submit" 
-                disabled={isSubmitting}
-                className="w-full btn-gold py-4 font-bold text-lg shadow-xl mt-4 flex items-center justify-center gap-2"
-              >
-                {isSubmitting && <Loader2 className="animate-spin" size={20} />}
-                Salvar Compra
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      <ConfirmModal
-        isOpen={confirmDelete.isOpen}
-        onClose={() => setConfirmDelete({ isOpen: false, id: null })}
-        onConfirm={() => confirmDelete.id && handleDelete(confirmDelete.id)}
+      <ConfirmModal 
+        isOpen={isConfirmOpen}
+        onClose={() => setIsConfirmOpen(false)}
+        onConfirm={handleDelete}
         title="Excluir Cartão"
-        message="Tem certeza que deseja excluir este cartão? Todas as compras associadas a ele também serão afetadas."
+        message="Tem certeza que deseja excluir este cartão? Esta ação não pode ser desfeita."
       />
     </div>
   );
